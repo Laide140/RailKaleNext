@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>路网地图</title>
+<link rel="stylesheet" href="./fontawesome/fontawesome-all.css">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#mapContainer{width:100%;height:100%;position:relative}
+
+#infoPanel,#trainInfoPanel{position:fixed;bottom:130px;left:30px;right:30px;background:#fff;border-radius:16px;padding:18px 22px;box-shadow:0 -4px 30px rgba(0,0,0,0.15);z-index:200;display:none;animation:slideUp .25s ease}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+#infoPanel .h,#trainInfoPanel .h{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #f0f0f0}
+#infoPanel .h .t,#trainInfoPanel .h .t{font-size:16px;font-weight:bold;color:#333;flex:1}
+#infoPanel .h .c,#trainInfoPanel .h .c{font-size:20px;color:#999;cursor:pointer;padding:0 8px}
+#infoPanel .body,#trainInfoPanel .body{display:flex;flex-wrap:wrap}
+#infoPanel .row,#trainInfoPanel .row{width:50%;margin-bottom:10px}
+#infoPanel .row .k,#trainInfoPanel .row .k{font-size:12px;color:#999}
+#infoPanel .row .v,#trainInfoPanel .row .v{font-size:14px;color:#333;font-weight:500}
+</style>
+</head>
+<body>
+<div id="mapContainer"></div>
+<div id="compassDisplay" style="position:fixed;bottom:100px;left:16px;background:rgba(0,0,0,0.65);border-radius:12px;padding:6px 14px;z-index:999;display:none;color:#fff;font-size:14px;pointer-events:none">指南针: 等待中...</div>
+<div id="alertBell" onclick="toggleAlert()" style="position:fixed;bottom:30px;right:16px;width:50px;height:50px;border-radius:50%;background:#888;display:none;align-items:center;justify-content:center;z-index:999;box-shadow:0 2px 12px rgba(0,0,0,0.2);cursor:pointer"><i class="fas fa-bell" style="color:#fff;font-size:24px"></i></div>
+
+<div id="trainInfoPanel">
+	<div class="h"><span class="t" id="trainInfoTitle">车次</span><span class="c" onclick="hideTrainInfo()">✕</span></div>
+	<div class="body">
+		<div class="row"><span class="k">类型</span><span class="v" id="trainInfoType">列车</span></div>
+		<div class="row"><span class="k">区间</span><span class="v" id="trainInfoSeg">—</span></div>
+		<div class="row"><span class="k">状态</span><span class="v" id="trainInfoStatus">—</span></div>
+		<div class="row"><span class="k">进度</span><span class="v" id="trainInfoProgress">—</span></div>
+			<div class="row"><span class="k">车组号</span><span class="v" id="trainInfoEmu">查询中...</span></div>
+	</div>
+</div>
+
+<div id="infoPanel">
+	<div class="h"><span class="t" id="infoTitle">线路名称</span><span class="c" onclick="hideInfo()">✕</span></div>
+	<div class="body">
+		<div class="row"><span class="k">类型</span><span class="v" id="infoType">铁路</span></div>
+		<div class="row"><span class="k">层数</span><span class="v" id="infoLayer">0 层</span></div>
+		<div class="row"><span class="k">桥梁</span><span class="v" id="infoBridge">否</span></div>
+		<div class="row"><span class="k">隧道</span><span class="v" id="infoTunnel">否</span></div>
+	</div>
+</div>
+
+<script>
+function getParam(name) {
+	var m = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'))
+	return m ? decodeURIComponent(m[1]) : ''
+}
+// 密钥由加载页（rail-network-map.vue）通过 URL 动态传入
+var AMAP_KEY = getParam('key') || ''
+var AMAP_SEC = getParam('sec') || ''
+var CHINA_CENTER = [116.397428, 39.90923]
+var RAIL_ONLY = location.search.indexOf('rail=1') >= 0
+var IS_APP = location.search.indexOf('app=1') >= 0
+// GeoJSON 目录：优先使用加载页传入的地址（跟随 API 源设置），否则用本地相对目录
+var GEO_DIR = getParam('geo') || './railway/'
+// API 根地址（从 GEO_DIR 推导：去掉 /getTrainTimeTable/railway 后缀）
+var API_BASE = GEO_DIR.replace(/\/getTrainTimeTable\/railway\/?$/, '')
+var FILE_LIST = ['110000.geojson','120000.geojson','130000.geojson','140000.geojson','150000.geojson','210000.geojson','220000.geojson','230000.geojson','310000.geojson','320000.geojson','330000.geojson','340000.geojson','350000.geojson','360000.geojson','370000.geojson','410000.geojson','420000.geojson','430000.geojson','440000.geojson','450000.geojson','460000.geojson','500000.geojson','510000.geojson','520000.geojson','530000.geojson','540000.geojson','610000.geojson','620000.geojson','630000.geojson','640000.geojson','650000.geojson','810000.geojson','820000.geojson']
+var map = null, canvasCtx = null, canvasEl = null
+var allFeatures = []
+var mapReady = false
+var HIT_THRESHOLD = 6
+var pendingData = []
+
+window._AMapSecurityConfig = {
+	securityJsCode: AMAP_SEC
+}
+
+function loadAMap() {
+	return new Promise(function(resolve, reject) {
+		if (typeof AMap !== 'undefined') { resolve(); return }
+		var s = document.createElement('script')
+		s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY
+		s.async = true; s.onload = resolve
+		s.onerror = function() { reject(new Error('高德地图加载失败')) }
+		document.head.appendChild(s)
+	})
+}
+
+function initMap() {
+	map = new AMap.Map('mapContainer', {
+		center: CHINA_CENTER, zoom: RAIL_ONLY ? 12 : 5,
+		mapStyle: 'amap://styles/fresh', resizeEnable: true,
+		dragEnable: true, scrollWheel: true,
+		touchZoom: true, doubleClickZoom: true, zoomEnable: true
+	})
+	mapReady = true
+	while (pendingData.length) addFeatures(pendingData.splice(0, 5000))
+	canvasEl = document.createElement('canvas')
+	canvasEl.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:10'
+	var c = document.getElementById('mapContainer')
+	canvasEl.width = c.clientWidth; canvasEl.height = c.clientHeight
+	c.appendChild(canvasEl)
+	canvasCtx = canvasEl.getContext('2d')
+	map.on('resize', function() { canvasEl.width = c.clientWidth; canvasEl.height = c.clientHeight; redraw() })
+	map.on('moveend', function() { _selectedLine = null; redraw(); if (RAIL_ONLY) { logVisibleCities(); findStations() } })
+	
+	map.on('click', function(e) {
+		hideTrainInfo()
+		var f = pick(e.lnglat.getLng(), e.lnglat.getLat())
+		if (f) {
+			if (_selectedLine && f.props.name !== _selectedLine) {
+				// 点击了隐藏的线路，切换显示
+				selectLineOnly(f.props.name)
+			}
+			showInfo(f);
+		} else hideInfo()
+	})
+	if (RAIL_ONLY) document.getElementById('alertBell').style.display = 'flex'
+	// H5 模式自动加载数据
+	if (!IS_APP) fetchAll()
+}
+
+async function fetchAll() {
+	for (var i = 0; i < FILE_LIST.length; i++) {
+		try {
+			var r = await fetch(GEO_DIR + FILE_LIST[i])
+			var gj = await r.json()
+			if (gj && gj.features) addFeatures(gj.features)
+		} catch(e) { console.warn(FILE_LIST[i] + ':', e) }
+	}
+	if (RAIL_ONLY) logVisibleCities()
+}
+
+function addFeatures(features) {
+	if (!mapReady) { pendingData.push.apply(pendingData, features); return }
+	for (var i = 0; i < features.length; i++) {
+		var f = features[i]
+		if (!f.geometry || !f.geometry.coordinates) continue
+		var p = f.properties || {}
+		var coords = f.geometry.coordinates
+		var sw = p.fclass === 'subway'
+		var item = { props: p, isSubway: sw, bounds: {a:Infinity,b:Infinity,c:-Infinity,d:-Infinity}, segs: [] }
+		for (var j = 0; j < coords.length; j++) {
+			var pts = coords[j]; if (pts.length < 2) continue
+			var flat = []
+			for (var k = 0; k < pts.length; k++) {
+				var lng = pts[k][0], lat = pts[k][1]
+				if (lng > 73 && lng < 135 && lat > 3 && lat < 54) { var g = wgs84ToGcj02(lng, lat); lng = g.lng; lat = g.lat }
+				flat.push(lng, lat)
+				if (lng < item.bounds.a) item.bounds.a = lng
+				if (lat < item.bounds.b) item.bounds.b = lat
+				if (lng > item.bounds.c) item.bounds.c = lng
+				if (lat > item.bounds.d) item.bounds.d = lat
+			}
+			item.segs.push(flat)
+		}
+		if (item.segs.length) allFeatures.push(item)
+	}
+	redraw()
+	if (allFeatures.length > 0 && !navigator._located) { navigator._located = true; tryLocateUser() }
+	if (RAIL_ONLY) logVisibleCities()
+}
+
+// 视野内线路（供 App 桥接用）
+
+// Search functionality
+var _allLineNames = []
+function buildLineIndex() {
+	var names = {}
+	for (var i = 0; i < allFeatures.length; i++) {
+		var n = allFeatures[i].props.name
+		if (n && allFeatures[i].props.fclass === 'rail') names[n] = true
+	}
+	_allLineNames = Object.keys(names).sort()
+}
+
+function selectLineOnly(name) {
+	_selectedLine = name
+	document.title = 'SEL:' + name
+	var inp = document.getElementById('searchInput'); if (inp) inp.value = name
+	clearTrainMarkers()
+	redraw()
+	// Notify Vue to scan
+	if (typeof uni !== 'undefined' && uni.postMessage) {
+		uni.postMessage({data:{selectLine: name}})
+	}
+}
+
+function getVisibleRailLines() {
+	if (!map || !allFeatures.length) return []
+	var vb = map.getBounds()
+	if (!vb) return []
+	var sw = vb.getSouthWest(), ne = vb.getNorthEast()
+	var lines = {}
+	for (var i = 0; i < allFeatures.length; i++) {
+		var b = allFeatures[i].bounds
+		if (b.c >= sw.getLng() && b.a <= ne.getLng() && b.d >= sw.getLat() && b.b <= ne.getLat()) {
+			var n = allFeatures[i].props.name
+			if (n && allFeatures[i].props.fclass === 'rail') lines[n] = true
+		}
+	}
+	return Object.keys(lines)
+}
+
+// App 桥接：导航到自定义 URL 传数据
+function notifyVisibleLines() {
+	var list = getVisibleRailLines()
+	if (list.length) {
+		clearTrainMarkers()
+		window.location.href = 'bridge://visible?data=' + encodeURIComponent(JSON.stringify(list))
+	}
+}
+
+// 列车雷达标记
+var _selectedLine = null
+var trainMarkers = []
+function clearTrainMarkers() {
+	for (var i = 0; i < trainMarkers.length; i++) map.remove(trainMarkers[i])
+	trainMarkers = []
+}
+function addTrainMarker(data) {
+	var g = wgs84ToGcj02(data.position.lng, data.position.lat)
+	var marker = new AMap.Marker({
+		position: [g.lng, g.lat],
+		icon: new AMap.Icon({
+			image: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="7" fill="#3388FF" stroke="#fff" stroke-width="2"/></svg>'),
+			size: new AMap.Size(20, 20), imageSize: new AMap.Size(20, 20)
+		}),
+		offset: new AMap.Pixel(-10, -10), zIndex: 200
+	})
+	marker._trainData = data
+	marker.on('click', function(e) {
+		e.domEvent && e.domEvent.stopPropagation()
+		showTrainInfo(e.target._trainData)
+	})
+	marker.setMap(map)
+	trainMarkers.push(marker)
+}
+function showTrainInfo(data) {
+	document.getElementById('trainInfoTitle').textContent = data.train
+	document.getElementById('trainInfoType').style.color = '#3388FF'
+	var seg = data.segment
+	var fromStation = data.from_station || (seg && (seg.depart || seg.from)) || '?'
+	var toStation = data.to_station || (seg && (seg.arrive || seg.to)) || '?'
+	document.getElementById("trainInfoSeg").textContent = fromStation + " → " + toStation
+	var st = data.status || ""
+	if (st === 'running') st = '运行中'
+	else if (st === 'arrived') st = '已到达'
+	else if (st === 'waiting') st = '等待中'
+	document.getElementById('trainInfoStatus').textContent = st
+	document.getElementById('trainInfoProgress').textContent = data.progress || '—'
+	var emuEl = document.getElementById('trainInfoEmu')
+	if (emuEl) emuEl.textContent = data.emu_no || '—'
+	document.getElementById('trainInfoPanel').style.display = 'block'
+}
+
+function hideTrainInfo() { document.getElementById('trainInfoPanel').style.display = 'none' }
+
+var _alertOn = false
+function toggleAlert() {
+	if (_alertOn) {
+		_alertOn = false
+		document.getElementById('alertBell').style.background = '#888'
+		if (_compassTimer) { clearInterval(_compassTimer); _compassTimer = null }; var el = document.getElementById('compassDisplay'); if (el) { el.style.display = 'none'; el.textContent = '指南针: 等待中...' }
+		return
+	}
+	if (confirm('是否开启列车预警功能？')) {
+		_alertOn = true
+		document.getElementById('alertBell').style.background = '#e74c3c'
+		startCompass()
+	}
+}
+
+var _compassTimer = null
+function startCompass() {
+	// 尝试 DeviceOrientation API
+	if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+		DeviceOrientationEvent.requestPermission().then(function(state) {
+			if (state === 'granted') {
+				window.addEventListener('deviceorientation', onCompass)
+				console.log('[指南针] 已开启'); var el = document.getElementById('compassDisplay'); if (el) el.textContent = '🧭 指南针就绪'
+			}
+		}).catch(function(){})
+	} else {
+		window.addEventListener('deviceorientation', onCompass)
+		console.log('[指南针] 已开启'); var el = document.getElementById('compassDisplay'); if (el) el.textContent = '🧭 指南针就绪'
+	}
+	// fallback: 用 ondevicemotion
+	_compassTimer = setInterval(function() {
+		if (!window._lastHeading) console.log('[指南针] 等待数据...')
+	}, 5000)
+}
+
+function onCompass(e) {
+	if (!e.webkitCompassHeading && !e.alpha) return
+	var heading = e.webkitCompassHeading || e.alpha || 0
+	var dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
+	var idx = Math.round(heading / 45) % 8
+	var el = document.getElementById('compassDisplay'); if (el) { el.style.display = 'block'; el.textContent = '🧭 ' + dirs[idx] + ' ' + Math.round(heading) + '°' }
+}
+
+function findStations() {
+	if (!map || !RAIL_ONLY) return
+	var vb = map.getBounds()
+	if (!vb) return
+	console.log('[雷达] 搜索车站...')
+	AMap.plugin('AMap.PlaceSearch', function() {
+		var ps = new AMap.PlaceSearch({ type: '火车站', pageSize: 20 })
+		console.log('[雷达] PlaceSearch发起')
+		ps.searchInBounds('火车站', vb, function(status, result) {
+			if (status !== 'complete' || !result || !result.poiList || !result.poiList.pois) { console.log('[雷达] 车站搜索无结果 status=' + status); document.title = 'STA:'; return }
+			var names = result.poiList.pois.map(function(p) { return p.name }).filter(function(n) { return n.indexOf('站') > 0 || n.indexOf('火车站') > 0 })
+			var unique = []
+			for (var i = 0; i < names.length; i++) { if (unique.indexOf(names[i]) < 0) unique.push(names[i]) }
+			document.title = 'STA:' + unique.join('|')
+		})
+	})
+}
+
+// H5 模式：直接扫列车
+async function h5Scan() {
+	if (IS_APP || !RAIL_ONLY) return
+	var title = document.title
+	if (!title || title.indexOf('STA:') !== 0) return
+	var stations = title.substring(4).split('|').filter(function(s){return s})
+	if (!stations.length) return
+	var params = stations.map(function(s){return 'station=' + encodeURIComponent(s)}).join('&')
+	try {
+		var r = await fetch(API_BASE + '/getLineTrains/?' + params)
+		var d = await r.json()
+		if (d.code === '0' && d.trains && d.trains.length) {
+			clearTrainMarkers()
+			for (var i = 0; i < d.trains.length; i += 20) {
+				var batch = d.trains.slice(i, i + 20)
+				var results = await Promise.all(batch.map(async function(num) {
+					try {
+						var r2 = await fetch(API_BASE + '/getTrainLocate/index.php?train=' + encodeURIComponent(num))
+						var d2 = await r2.json()
+						if (d2.code === 0 && d2.data && d2.data.position) return d2.data
+					} catch(e){}
+					return null
+				}))
+				for (var j = 0; j < results.length; j++) {
+					if (results[j]) addTrainMarker(results[j])
+				}
+			}
+		}
+	} catch(e) { console.warn('[雷达] H5扫描失败:', e) }
+}
+
+// 每10秒扫一次
+if (!IS_APP && RAIL_ONLY) setInterval(h5Scan, 10000)
+
+function logVisibleCities() {
+	if (!map || !allFeatures.length) return
+	var vb = map.getBounds()
+	if (!vb) return
+	var sw = vb.getSouthWest(), ne = vb.getNorthEast()
+	var names = {}
+	for (var i = 0; i < allFeatures.length; i++) {
+		var b = allFeatures[i].bounds
+		if (b.c >= sw.getLng() && b.a <= ne.getLng() && b.d >= sw.getLat() && b.b <= ne.getLat()) {
+			var n = allFeatures[i].props.name
+			if (n) names[n] = true
+		}
+	}
+	var list = Object.keys(names).sort()
+	if (list.length) {
+		console.log('[路网] 视野内线路:', list.join(', '))
+		try { history.pushState({}, '', '#lines'); window._lastLines = list; uni.postMessage({data:{lines:list}}); setTimeout(function(){history.back()},50) } catch(e) {}
+	}
+}
+
+function redraw() {
+	if (!mapReady || !canvasCtx) return
+	var vb = map.getBounds()
+	if (!vb) return
+	var sw = vb.getSouthWest(), ne = vb.getNorthEast()
+	var v = {a:sw.getLng(), b:sw.getLat(), c:ne.getLng(), d:ne.getLat()}
+	canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height)
+	renderPass(v, false)
+	if (!RAIL_ONLY) renderPass(v, true)
+}
+
+function renderPass(v, isSubway) {
+	var ctx = canvasCtx
+	if (RAIL_ONLY && isSubway) return
+	var z = map.getZoom()
+	if (z < 7 && isSubway) return
+	var thin = z < 6
+	ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+	ctx.strokeStyle = isSubway ? '#3388FF' : '#DD3333'
+	ctx.lineWidth = isSubway ? 1.5 : 2
+	for (var i = 0; i < allFeatures.length; i++) {
+		var it = allFeatures[i]
+		if (it.isSubway !== isSubway) continue
+		if (_selectedLine && it.props.name !== _selectedLine) continue
+		var b = it.bounds
+		if (b.c < v.a || b.a > v.c || b.d < v.b || b.b > v.d) continue
+		ctx.setLineDash(it.props.tunnel === 'T' ? [4,4] : [])
+		ctx.beginPath()
+		var drawn = false
+		for (var s = 0; s < it.segs.length; s++) {
+			var flat = it.segs[s]
+			var visible = false
+			for (var p = 0; p < flat.length && !visible; p += 2) {
+				if (flat[p] >= v.a && flat[p] <= v.c && flat[p+1] >= v.b && flat[p+1] <= v.d) visible = true
+			}
+			if (!visible) continue
+			var px = map.lngLatToContainer(new AMap.LngLat(flat[0], flat[1]))
+			ctx.moveTo(px.x, px.y)
+			var step = thin ? 3 : 1
+			for (var p = 2; p < flat.length; p += 2*step) {
+				px = map.lngLatToContainer(new AMap.LngLat(flat[p], flat[p+1]))
+				ctx.lineTo(px.x, px.y)
+			}
+			drawn = true
+		}
+		if (drawn) ctx.stroke()
+	}
+	ctx.setLineDash([])
+}
+
+function pick(lng, lat) {
+	var best = HIT_THRESHOLD * HIT_THRESHOLD, bestItem = null
+	var cp = map.lngLatToContainer(new AMap.LngLat(lng, lat))
+	for (var i = 0; i < allFeatures.length; i++) {
+		var it = allFeatures[i]
+		if (RAIL_ONLY && it.isSubway) continue
+		var b = it.bounds
+		if (lng < b.a || lng > b.c || lat < b.b || lat > b.d) continue
+		for (var s = 0; s < it.segs.length; s++) {
+			var flat = it.segs[s]
+			for (var p = 0; p < flat.length-2; p += 2) {
+				if (Math.abs((flat[p]+flat[p+2])/2-lng) > 0.5 || Math.abs((flat[p+1]+flat[p+3])/2-lat) > 0.5) continue
+				var p1 = map.lngLatToContainer(new AMap.LngLat(flat[p], flat[p+1]))
+				var p2 = map.lngLatToContainer(new AMap.LngLat(flat[p+2], flat[p+3]))
+				var d = segDistSq(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y)
+				if (d < best) { best = d; bestItem = it }
+			}
+		}
+	}
+	return bestItem
+}
+
+function segDistSq(px,py,x1,y1,x2,y2) {
+	var dx=x2-x1, dy=y2-y1, lenSq=dx*dx+dy*dy
+	if (lenSq===0) { var ex=px-x1, ey=py-y1; return ex*ex+ey*ey }
+	var t=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/lenSq))
+	var nx=x1+t*dx, ny=y1+t*dy
+	var ex=px-nx, ey=py-ny
+	return ex*ex+ey*ey
+}
+
+function showInfo(item) {
+	var p = item.props
+	document.getElementById('infoTitle').textContent = p.name || '无名线路'
+	var te = document.getElementById('infoType')
+	te.textContent = item.isSubway ? '地铁' : '铁路'
+	te.style.color = item.isSubway ? '#3388FF' : '#DD3333'
+	document.getElementById('infoLayer').textContent = p.layer !== undefined ? p.layer + ' 层' : '—'
+	document.getElementById('infoBridge').textContent = p.bridge === 'T' ? '是' : '否'
+	document.getElementById('infoTunnel').textContent = p.tunnel === 'T' ? '是' : '否'
+	document.getElementById('infoPanel').style.display = 'block'
+}
+function hideInfo() { document.getElementById('infoPanel').style.display = 'none' }
+
+function tryLocateUser() {
+	if (!navigator.geolocation || !map) return
+	navigator.geolocation.getCurrentPosition(function(pos) {
+		var g = wgs84ToGcj02(pos.coords.longitude, pos.coords.latitude)
+		var m = new AMap.Marker({
+			position: [g.lng, g.lat],
+			icon: new AMap.Icon({image:'https://a.amap.com/jsapi_demos/static/demo-center/icons/poi-marker-red.png', size:new AMap.Size(30,40), imageSize:new AMap.Size(30,40)}),
+			offset: new AMap.Pixel(-15,-40), zIndex: 999
+		})
+		m.setMap(map)
+		map.setZoomAndCenter(RAIL_ONLY ? 12 : 10, [g.lng, g.lat])
+	}, function(){}, {enableHighAccuracy:true, timeout:10000, maximumAge:60000})
+}
+
+var pi=3.141592653589793, a=6378245.0, ee=0.00669342162296594323
+function tlat(x,y){
+	var r=-100+2*x+3*y+0.2*y*y+0.1*x*y+0.2*Math.sqrt(Math.abs(x))
+	r+=(20*Math.sin(6*x*pi)+20*Math.sin(2*x*pi))*2/3
+	r+=(20*Math.sin(y*pi)+40*Math.sin(y/3*pi))*2/3
+	r+=(160*Math.sin(y/12*pi)+320*Math.sin(y*pi/30))*2/3
+	return r
+}
+function tlng(x,y){
+	var r=300+x+2*y+0.1*x*x+0.1*x*y+0.1*Math.sqrt(Math.abs(x))
+	r+=(20*Math.sin(6*x*pi)+20*Math.sin(2*x*pi))*2/3
+	r+=(20*Math.sin(x*pi)+40*Math.sin(x/3*pi))*2/3
+	r+=(150*Math.sin(x/12*pi)+300*Math.sin(x/30*pi))*2/3
+	return r
+}
+function wgs84ToGcj02(lng,lat){
+	var dl=tlat(lng-105,lat-35),dg=tlng(lng-105,lat-35),rd=lat/180*pi,m=Math.sin(rd);m=1-ee*m*m;var s=Math.sqrt(m)
+	dl=(dl*180)/((a*(1-ee))/(m*s)*pi);dg=(dg*180)/(a/s*Math.cos(rd)*pi)
+	return{lng:lng+dg,lat:lat+dl}
+}
+
+loadAMap().then(function() {
+	initMap()
+}).catch(function(e) { console.error(e) })
+</script>
+</body>
+</html>

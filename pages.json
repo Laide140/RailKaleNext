@@ -1,0 +1,188 @@
+{
+    "pages": [
+        {
+            "path": "pages/home/home",
+            "style": {
+                "navigationBarTitleText": "铁路万花筒",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
+            "path": "pages/train-query/train-query",
+            "style": {
+                "navigationBarTitleText": "车次查询"
+            }
+        },
+        {
+            "path": "pages/timetable/timetable",
+            "style": {
+                "navigationBarTitleText": "时刻表",
+                "app-plus": {
+                    "titleNView": {
+                        "buttons": [
+                            {
+                                "text": "切换",
+                                "fontSize": "14",
+                                "color": "#007aff"
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "path": "pages/train-locate/train-locate",
+            "style": {
+                "navigationBarTitleText": "列车实时位置"
+            }
+        },
+        {
+            "path": "pages/station-screen/station-screen",
+            "style": {
+                "navigationBarTitleText": "车站大屏"
+            }
+        },
+        {
+            "path": "pages/ticket-gate/ticket-gate",
+            "style": {
+                "navigationBarTitleText": "检票口查询"
+            }
+        },
+        {
+            "path": "pages/souvenir-ticket/souvenir-ticket",
+            "style": {
+                "navigationBarTitleText": "纪念车票"
+            }
+        },
+        {
+            "path": "pages/station-code/station-code",
+            "style": {
+                "navigationBarTitleText": "车站代码"
+            }
+        },
+        {
+            "path": "pages/station-area/station-area",
+            "style": {
+                "navigationBarTitleText": "站台规模"
+            }
+        },
+        {
+            "path": "pages/line-map/line-map",
+            "style": {
+                "navigationBarTitleText": "铁路线路图"
+            }
+        },
+        {
+            "path": "pages/rail-network-map/rail-network-map",
+            "style": {
+                "navigationBarTitleText": "路网地图",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black",
+                "app-plus": {
+                    "titleNView": false
+                },
+                "h5": {
+                    "navigationBar": {
+                        "backgroundColor": "#1a73e8",
+                        "titleText": "路网地图"
+                    }
+                }
+            }
+        },
+        {
+            "path": "pages/traffic-query/traffic-query",
+            "style": {
+                "navigationBarTitleText": "交通查询",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
+            "path": "pages/emu-query/emu-query",
+            "style": {
+                "navigationBarTitleText": "动车组运用查询",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
+            "path": "pages/train-broadcast/train-broadcast",
+            "style": {
+                "navigationBarTitleText": "列车广播"
+            }
+        },
+        {
+            "path": "pages/speed-test/speed-test",
+            "style": {
+                "navigationBarTitleText": "定位测速"
+            }
+        },
+        {
+            "path": "pages/section-detail/section-detail",
+            "style": {
+                "navigationBarTitleText": "功能"
+            }
+        },
+        {
+            "path": "pages/settings/settings",
+            "style": {
+                "navigationBarTitleText": "设置"
+            }
+        },
+        {
+            "path": "pages/custom-editor/custom-editor",
+            "style": {
+                "navigationBarTitleText": "自定义主页"
+            }
+        },
+        {
+            "path": "pages/mine/mine",
+            "style": {
+                "navigationBarTitleText": "我的",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        }
+    ],
+    "globalStyle": {
+        "navigationBarTextStyle": "black",
+        "navigationBarTitleText": "铁路万花筒",
+        "navigationBarBackgroundColor": "#ffffff",
+        "backgroundColor": "#F8F8F8",
+        "backgroundColorTop": "#F4F5F6",
+        "backgroundColorBottom": "#F4F5F6",
+        "h5": {
+            "maxWidth": 1190,
+            "navigationBarTextStyle": "black",
+            "navigationBarBackgroundColor": "rgba(255,255,255,0.72)"
+        }
+    },
+    "tabBar": {
+        "custom": true,
+        "color": "#7A7E83",
+        "selectedColor": "#1a73e8",
+        "borderStyle": "black",
+        "backgroundColor": "#F8F8F8",
+        "list": [
+            {
+                "pagePath": "pages/home/home",
+                "iconPath": "static/home.png",
+                "selectedIconPath": "static/home-active.png",
+                "text": "首页"
+            },
+            {
+                "pagePath": "pages/rail-network-map/rail-network-map",
+                "iconPath": "static/route.png",
+                "selectedIconPath": "static/route-active.png",
+                "text": "路网地图"
+            },
+            {
+                "pagePath": "pages/mine/mine",
+                "iconPath": "static/logo.png",
+                "selectedIconPath": "static/logo-active.png",
+                "text": "我的"
+            }
+        ]
+    }
+}

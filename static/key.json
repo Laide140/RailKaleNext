@@ -1,0 +1,6 @@
+{
+	"_comment": "密钥配置见 common/config.js（本地配置文件）。运行时从 config.js + 本地存储 app_settings.keys 读取，本文件仅作说明，不导入。自定义密钥请在设置→接口密钥 中填写。",
+	"amap": "default",
+	"amap_js": "default",
+	"amap_sec": "default"
+}

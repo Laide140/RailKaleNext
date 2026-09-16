@@ -1,0 +1,9 @@
+# ===== unpackage 里不用的编译产物（保留 unpackage/res/ App 图标）=====
+unpackage/cache/
+unpackage/debug/
+unpackage/dist/
+unpackage/release/
+unpackage/resources/
+
+# ===== 本地密钥配置文件（含真实密钥，不入库；参考 common/config.example.js）=====
+common/config.js
