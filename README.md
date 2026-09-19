@@ -7,6 +7,14 @@
 - 官网：<https://next.laide.net.cn>（APK 下载与项目介绍）
 - 仓库：<https://github.com/Laide140/RailKaleNext>
 
+<a href="https://www.star-history.com/?repos=laide140%2Frailkalenext&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=laide140/railkalenext&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=laide140/railkalenext&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=laide140/railkalenext&type=date&legend=top-left" />
+ </picture>
+</a>
+
 ---
 
 ## 目录
