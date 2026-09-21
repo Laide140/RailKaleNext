@@ -97,7 +97,11 @@ function initMap() {
 	c.appendChild(canvasEl)
 	canvasCtx = canvasEl.getContext('2d')
 	map.on('resize', function() { canvasEl.width = c.clientWidth; canvasEl.height = c.clientHeight; redraw() })
-	map.on('moveend', function() { _selectedLine = null; redraw(); if (RAIL_ONLY) { logVisibleCities(); findStations() } })
+	map.on('moveend', function() {
+		_selectedLine = null
+		scheduleRedraw()
+		if (RAIL_ONLY) { logVisibleCities(); findStations() }
+	})
 	
 	map.on('click', function(e) {
 		hideTrainInfo()
@@ -151,7 +155,8 @@ function addFeatures(features) {
 		}
 		if (item.segs.length) allFeatures.push(item)
 	}
-	redraw()
+	// 分批加载时合并重绘，避免每个省份都触发一次全量渲染
+	scheduleRedraw()
 	if (allFeatures.length > 0 && !navigator._located) { navigator._located = true; tryLocateUser() }
 	if (RAIL_ONLY) logVisibleCities()
 }
@@ -366,15 +371,95 @@ function logVisibleCities() {
 	}
 }
 
+// ===== 渲染优化 =====
+// 全国路网约 570 万点，逐点调用 map.lngLatToContainer 会创建大量对象并拖垮低配机。
+// 这里改为纯数学投影 + 视口裁剪 + 按缩放级别抽稀，避免逐点 API 调用。
+
+var _proj = null          // 当前投影参数（由 refreshProjection 计算）
+var _redrawTimer = null   // moveend 重绘节流
+
+// 预计算 Web Mercator 投影参数：把经纬度直接换算为容器像素坐标
+function refreshProjection() {
+	var size = map.getSize()
+	var center = map.getCenter()
+	var z = map.getZoom()
+	var scale = 256 * Math.pow(2, z)
+	var cLng = center.getLng(), cLat = center.getLat()
+	var sinLat = Math.sin(cLat * Math.PI / 180)
+	// 限制纬度，避免极点处数值爆炸
+	if (sinLat > 0.9999) sinLat = 0.9999
+	if (sinLat < -0.9999) sinLat = -0.9999
+	var cX = (cLng + 180) / 360 * scale
+	var cY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
+	_proj = {
+		scale: scale,
+		cX: cX,
+		cY: cY,
+		ox: size.getWidth() / 2,
+		oy: size.getHeight() / 2
+	}
+}
+
+// 经纬度 → 容器像素（纯数学，无对象创建）
+// 将结果写入 out 数组 [x, y] 以复用内存
+function projectTo(lng, lat, out) {
+	var p = _proj
+	var sinLat = Math.sin(lat * Math.PI / 180)
+	if (sinLat > 0.9999) sinLat = 0.9999
+	if (sinLat < -0.9999) sinLat = -0.9999
+	out[0] = p.ox + ((lng + 180) / 360 * p.scale - p.cX)
+	out[1] = p.oy + ((0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * p.scale - p.cY)
+	return out
+}
+
+// 按缩放级别决定抽稀步长（低 zoom 跳点更多）
+function pickStep(z) {
+	if (z >= 14) return 1
+	if (z >= 12) return 2
+	if (z >= 10) return 3
+	if (z >= 8) return 5
+	if (z >= 6) return 8
+	return 12
+}
+
+// 低缩放时整条线若过小（像素跨度极小）则跳过，避免稠密地区糊成一团
+function tooSmallToDraw(it, minPx) {
+	if (!_proj) return false
+	var tmp = [0, 0]
+	projectTo(it.bounds.a, it.bounds.d, tmp)   // 左上（西、北）
+	var x1 = tmp[0], y1 = tmp[1]
+	projectTo(it.bounds.c, it.bounds.b, tmp)   // 右下（东、南）
+	var x2 = tmp[0], y2 = tmp[1]
+	return (Math.abs(x2 - x1) < minPx && Math.abs(y2 - y1) < minPx)
+}
+
 function redraw() {
 	if (!mapReady || !canvasCtx) return
 	var vb = map.getBounds()
 	if (!vb) return
+	refreshProjection()
 	var sw = vb.getSouthWest(), ne = vb.getNorthEast()
-	var v = {a:sw.getLng(), b:sw.getLat(), c:ne.getLng(), d:ne.getLat()}
+	// 视口外扩一点，减少拖动时的边缘闪烁
+	var padLng = (ne.getLng() - sw.getLng()) * 0.05
+	var padLat = (ne.getLat() - sw.getLat()) * 0.05
+	var v = {
+		a: sw.getLng() - padLng,
+		b: sw.getLat() - padLat,
+		c: ne.getLng() + padLng,
+		d: ne.getLat() + padLat
+	}
 	canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height)
 	renderPass(v, false)
 	if (!RAIL_ONLY) renderPass(v, true)
+}
+
+// 节流重绘：拖动/缩放/分批加载时短时间内只重绘一次
+function scheduleRedraw() {
+	if (_redrawTimer) return
+	_redrawTimer = setTimeout(function() {
+		_redrawTimer = null
+		redraw()
+	}, 60)
 }
 
 function renderPass(v, isSubway) {
@@ -382,34 +467,48 @@ function renderPass(v, isSubway) {
 	if (RAIL_ONLY && isSubway) return
 	var z = map.getZoom()
 	if (z < 7 && isSubway) return
-	var thin = z < 6
+	var step = pickStep(z)
+	// 低缩放级别下，像素跨度太小的线路直接跳过（稠密区降负）
+	var minPx = z < 9 ? 6 : 0
 	ctx.lineCap = 'round'; ctx.lineJoin = 'round'
 	ctx.strokeStyle = isSubway ? '#3388FF' : '#DD3333'
 	ctx.lineWidth = isSubway ? 1.5 : 2
+	var tmp = [0, 0]
 	for (var i = 0; i < allFeatures.length; i++) {
 		var it = allFeatures[i]
 		if (it.isSubway !== isSubway) continue
 		if (_selectedLine && it.props.name !== _selectedLine) continue
 		var b = it.bounds
 		if (b.c < v.a || b.a > v.c || b.d < v.b || b.b > v.d) continue
+		if (minPx && tooSmallToDraw(it, minPx)) continue
 		ctx.setLineDash(it.props.tunnel === 'T' ? [4,4] : [])
 		ctx.beginPath()
 		var drawn = false
 		for (var s = 0; s < it.segs.length; s++) {
 			var flat = it.segs[s]
-			var visible = false
-			for (var p = 0; p < flat.length && !visible; p += 2) {
-				if (flat[p] >= v.a && flat[p] <= v.c && flat[p+1] >= v.b && flat[p+1] <= v.d) visible = true
+			var n = flat.length
+			// 单次遍历：既做视口命中判断，也直接绘制（命中后不再重复扫描）
+			var started = false
+			var li = 0
+			var lastX = 0, lastY = 0
+			for (var p = 0; p < n; p += 2) {
+				var lng = flat[p], lat = flat[p+1]
+				// 视口命中检测（含外扩），未命中且还没开始画的点直接跳过
+				var inView = (lng >= v.a && lng <= v.c && lat >= v.b && lat <= v.d)
+				if (!inView && !started) continue
+				li++
+				// 抽稀：在已开始绘制后按步长跳点（首点与末点必画）
+				if (started && step > 1 && (li % step !== 0) && p < n - 2) continue
+				projectTo(lng, lat, tmp)
+				if (!started) { ctx.moveTo(tmp[0], tmp[1]); started = true; drawn = true }
+				else ctx.lineTo(tmp[0], tmp[1])
+				lastX = tmp[0]; lastY = tmp[1]
 			}
-			if (!visible) continue
-			var px = map.lngLatToContainer(new AMap.LngLat(flat[0], flat[1]))
-			ctx.moveTo(px.x, px.y)
-			var step = thin ? 3 : 1
-			for (var p = 2; p < flat.length; p += 2*step) {
-				px = map.lngLatToContainer(new AMap.LngLat(flat[p], flat[p+1]))
-				ctx.lineTo(px.x, px.y)
+			// 补上最后一个点，保证线段完整
+			if (started && n >= 2) {
+				projectTo(flat[n-2], flat[n-1], tmp)
+				if (tmp[0] !== lastX || tmp[1] !== lastY) ctx.lineTo(tmp[0], tmp[1])
 			}
-			drawn = true
 		}
 		if (drawn) ctx.stroke()
 	}
@@ -418,7 +517,11 @@ function renderPass(v, isSubway) {
 
 function pick(lng, lat) {
 	var best = HIT_THRESHOLD * HIT_THRESHOLD, bestItem = null
-	var cp = map.lngLatToContainer(new AMap.LngLat(lng, lat))
+	// 用快速投影替代 lngLatToContainer，避免逐点创建 AMap.LngLat 对象
+	if (!_proj) refreshProjection()
+	var cp = [0, 0]
+	projectTo(lng, lat, cp)
+	var tmp = [0, 0]
 	for (var i = 0; i < allFeatures.length; i++) {
 		var it = allFeatures[i]
 		if (RAIL_ONLY && it.isSubway) continue
@@ -427,10 +530,12 @@ function pick(lng, lat) {
 		for (var s = 0; s < it.segs.length; s++) {
 			var flat = it.segs[s]
 			for (var p = 0; p < flat.length-2; p += 2) {
+				// 先用经纬度做廉价的距离预筛，避免大量无谓的投影换算
 				if (Math.abs((flat[p]+flat[p+2])/2-lng) > 0.5 || Math.abs((flat[p+1]+flat[p+3])/2-lat) > 0.5) continue
-				var p1 = map.lngLatToContainer(new AMap.LngLat(flat[p], flat[p+1]))
-				var p2 = map.lngLatToContainer(new AMap.LngLat(flat[p+2], flat[p+3]))
-				var d = segDistSq(cp.x, cp.y, p1.x, p1.y, p2.x, p2.y)
+				projectTo(flat[p], flat[p+1], tmp)
+				var x1 = tmp[0], y1 = tmp[1]
+				projectTo(flat[p+2], flat[p+3], tmp)
+				var d = segDistSq(cp[0], cp[1], x1, y1, tmp[0], tmp[1])
 				if (d < best) { best = d; bestItem = it }
 			}
 		}

@@ -43,11 +43,26 @@
 				</view>
 				<view class="metric-text">
 					<text class="metric-prefix">查询到车站规模为</text>
-					<text class="metric-plat">{{ info.platform }}台</text>
-					<text class="metric-line">{{ info.line }}线</text>
+					<text class="metric-plat">{{ platformText }}台</text>
+					<text class="metric-line">{{ lineText }}线</text>
 				</view>
 				<view class="tip" v-if="info.matched">
 					<text>「{{ info.matched }}」近似匹配到 {{ info.station }}</text>
+				</view>
+
+				<!-- 车站布线图 -->
+				<view class="layout-section" v-if="layoutImg">
+					<view class="layout-title">
+						<i class="fas fa-project-diagram"></i>
+						<text>车站布线图</text>
+					</view>
+					<view class="layout-thumb" @tap="previewLayout">
+						<image class="layout-img" :src="layoutImg" mode="widthFix" @error="onLayoutError" />
+						<view class="layout-mask">
+							<i class="fas fa-expand"></i>
+							<text>点击查看大图</text>
+						</view>
+					</view>
 				</view>
 			</view>
 			<view class="empty-state" v-if="!info && !loading">
@@ -61,6 +76,9 @@
 <script>
 	import { getStationArea } from '@/service/api.js'
 
+	// 车站布线图地址（维基图片库）
+	const LAYOUT_IMG_BASE = 'https://next.laide.net.cn/images/station_line_image_wikipedia/'
+
 	export default {
 		data() {
 			return {
@@ -68,7 +86,19 @@
 				loading: false,
 				searched: false,
 				info: null,
+				layoutImg: '',        // 布线图地址（404 时清空，不显示）
 				quickStations: ['广州南', '北京南', '上海虹桥', '深圳北', '杭州东', '成都东', '武汉', '南京南']
+			}
+		},
+		computed: {
+			// 接口未返回数值时显示 --
+			platformText() {
+				const v = this.info && this.info.platform
+				return (v === undefined || v === null || v === '') ? '--' : v
+			},
+			lineText() {
+				const v = this.info && this.info.line
+				return (v === undefined || v === null || v === '') ? '--' : v
 			}
 		},
 		methods: {
@@ -77,6 +107,7 @@
 				if (this.searched) {
 					this.searched = false
 					this.info = null
+					this.layoutImg = ''
 				}
 			},
 			fillStation(name) {
@@ -92,16 +123,19 @@
 				this.loading = true
 				this.searched = true
 				this.info = null
+				this.layoutImg = ''
 				try {
 					const res = await getStationArea(val)
 					// 成功：code === 200 且 data 存在
 					if (res && (res.code === 200 || res.success) && res.data && res.data.station) {
+						const stationName = res.data.station
 						this.info = {
-							station: res.data.station,
+							station: stationName,
 							platform: res.data.platform,
 							line: res.data.line,
 							matched: (res.message && res.message.includes('模糊')) ? val : null
 						}
+						this.buildLayoutImg(stationName, val)
 					} else {
 						uni.showToast({ title: '未找到该车站', icon: 'none' })
 					}
@@ -111,6 +145,30 @@
 				} finally {
 					this.loading = false
 				}
+			},
+			// 构造布线图地址：站名（带“站”后缀）
+			buildLayoutImg(stationName, fallbackName) {
+				const name = this.withStationSuffix(stationName || fallbackName)
+				if (!name) { this.layoutImg = ''; return }
+				this.layoutImg = LAYOUT_IMG_BASE + encodeURIComponent(name) + '.png'
+			},
+			// 补上“站”后缀（接口一般已返回，如“北京南站”；兜底处理“北京南”）
+			withStationSuffix(name) {
+				const n = String(name || '').trim()
+				if (!n) return ''
+				return n.endsWith('站') ? n : n + '站'
+			},
+			// 图片 404 / 加载失败 → 不显示
+			onLayoutError() {
+				this.layoutImg = ''
+			},
+			// 查看大图
+			previewLayout() {
+				if (!this.layoutImg) return
+				uni.previewImage({
+					urls: [this.layoutImg],
+					current: this.layoutImg
+				})
 			}
 		}
 	}
@@ -283,6 +341,45 @@
 	.metric-line { font-size: 30px; font-weight: 700; color: #34c759; font-variant-numeric: tabular-nums; }
 
 	.tip { margin-top: 14px; font-size: 12px; color: #c6c6c8; }
+
+	/* ===== 车站布线图 ===== */
+	.layout-section { width: 100%; margin-top: 18px; }
+	.layout-title {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--secondary);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+		margin-bottom: 10px;
+		i { color: var(--blue); font-size: 13px; }
+	}
+	.layout-thumb {
+		position: relative;
+		border-radius: 12px;
+		overflow: hidden;
+		background: var(--fill);
+		border: 0.5px solid var(--separator);
+	}
+	.layout-thumb:active { opacity: 0.85; }
+	.layout-img { width: 100%; display: block; }
+	.layout-mask {
+		position: absolute;
+		right: 10px;
+		bottom: 10px;
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		padding: 5px 10px;
+		border-radius: 14px;
+		background: rgba(0,0,0,0.55);
+		color: #fff;
+		font-size: 12px;
+		font-weight: 500;
+		i { font-size: 12px; color: #fff; }
+	}
 
 	.empty-state {
 		display: flex;
