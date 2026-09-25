@@ -428,12 +428,14 @@ function projectTo(lng, lat, out) {
 
 // 按缩放级别决定抽稀步长（低 zoom 跳点更多）
 function pickStep(z) {
+	// Keep the simplification conservative: large skips make adjacent rail
+	// segments appear disconnected at national zoom levels.
 	if (z >= 14) return 1
-	if (z >= 12) return 2
-	if (z >= 10) return 3
-	if (z >= 8) return 5
-	if (z >= 6) return 8
-	return 12
+	if (z >= 12) return 1
+	if (z >= 10) return 2
+	if (z >= 8) return 3
+	if (z >= 6) return 4
+	return 5
 }
 
 // 低缩放时整条线若过小（像素跨度极小）则跳过，避免稠密地区糊成一团
@@ -482,8 +484,9 @@ function renderPass(v, isSubway) {
 	var z = map.getZoom()
 	if (z < 7 && isSubway) return
 	var step = pickStep(z)
-	// 低缩放级别下，像素跨度太小的线路直接跳过（稠密区降负）
-	var minPx = z < 9 ? 6 : 0
+	// Do not drop short features: those are often the connecting pieces
+	// between otherwise separate railway geometries.
+	var minPx = 0
 	ctx.lineCap = 'round'; ctx.lineJoin = 'round'
 	ctx.strokeStyle = isSubway ? '#3388FF' : '#DD3333'
 	ctx.lineWidth = isSubway ? 1.5 : 2
