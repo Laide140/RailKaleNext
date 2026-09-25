@@ -38,6 +38,12 @@
             }
         },
         {
+            "path": "pages/train-radar/train-radar",
+            "style": {
+                "navigationBarTitleText": "列车雷达"
+            }
+        },
+        {
             "path": "pages/station-screen/station-screen",
             "style": {
                 "navigationBarTitleText": "车站大屏"

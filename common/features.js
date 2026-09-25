@@ -7,6 +7,7 @@ export const FEATURES = [
 	{ id: 'train-query', icon: 'fa-train', label: '车次查询', path: 'train-query', color: '#007aff', group: 'travel' },
 	{ id: 'timetable', icon: 'fa-calendar-alt', label: '时刻表', path: 'timetable', color: '#34c759', group: 'travel' },
 	{ id: 'train-locate', icon: 'fa-map-marker-alt', label: '实时位置', path: 'train-locate', color: '#ff2d55', group: 'travel' },
+	{ id: 'train-radar', icon: 'fa-satellite-dish', label: '列车雷达', path: 'train-radar', color: '#34c759', group: 'travel' },
 	{ id: 'speed-test', icon: 'fa-gauge-high', label: '定位测速', path: 'speed-test', color: '#ff9500', group: 'travel' },
 
 	{ id: 'station-screen', icon: 'fa-desktop', label: '车站大屏', path: 'station-screen', color: '#5856d6', group: 'station' },
@@ -29,7 +30,7 @@ export const SECTIONS = [
 		icon: 'fa-train',
 		badgeColor: '#007aff',
 		bgImage: '../../static/section-travel.jpg',
-		features: ['train-query', 'timetable', 'train-locate', 'speed-test'],
+		features: ['train-query', 'timetable', 'train-locate', 'train-radar', 'speed-test'],
 	},
 	{
 		id: 'station',
