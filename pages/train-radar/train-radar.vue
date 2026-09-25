@@ -10,7 +10,8 @@ export default {
 	data() { return { mapUrl: '', _timer: null } },
 	onLoad() {
 		// #ifdef H5
-		this.mapUrl = location.origin + '/static/railway-map.html?rail=1'
+		var mapPath = new URL('static/railway-map.html', document.baseURI).href
+		this.mapUrl = mapPath + '?rail=1'
 		// #endif
 		// #ifdef APP-PLUS
 		this.mapUrl = '/static/railway-map.html?app=1&rail=1'
