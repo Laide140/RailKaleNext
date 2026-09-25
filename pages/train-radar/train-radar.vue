@@ -6,15 +6,22 @@
 
 <script>
 import { getApiBase } from '@/service/api.js'
+import { getKey } from '@/common/keys.js'
 export default {
 	data() { return { mapUrl: '', _timer: null } },
 	onLoad() {
 		// #ifdef H5
+		var key = getKey('amap_js')
+		var sec = getKey('amap_sec')
+		var geo = encodeURIComponent(getApiBase('getTrainTimeTable/railway/index.php') + '/getTrainTimeTable/railway')
 		var mapPath = new URL('static/railway-map.html', document.baseURI).href
-		this.mapUrl = mapPath + '?rail=1'
+		this.mapUrl = mapPath + '?rail=1&key=' + encodeURIComponent(key) + '&sec=' + encodeURIComponent(sec) + '&geo=' + geo
 		// #endif
 		// #ifdef APP-PLUS
-		this.mapUrl = '/static/railway-map.html?app=1&rail=1'
+		var appKey = getKey('amap_js')
+		var appSec = getKey('amap_sec')
+		var appGeo = encodeURIComponent(getApiBase('getTrainTimeTable/railway/index.php') + '/getTrainTimeTable/railway')
+		this.mapUrl = '/static/railway-map.html?app=1&rail=1&key=' + encodeURIComponent(appKey) + '&sec=' + encodeURIComponent(appSec) + '&geo=' + appGeo
 		// #endif
 		this.start()
 	},
