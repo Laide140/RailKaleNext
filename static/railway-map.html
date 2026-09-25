@@ -337,7 +337,20 @@ async function h5Scan() {
 					try {
 						var r2 = await fetch(API_BASE + '/getTrainLocate/index.php?train=' + encodeURIComponent(num))
 						var d2 = await r2.json()
-						if (d2.code === 0 && d2.data && d2.data.position) return d2.data
+						if (d2.code === 0 && d2.data && d2.data.position) {
+							// 查询当天车组号后再展示标记，避免详情一直显示占位符。
+							try {
+								var er = await fetch('https://api.rail.re/train/' + encodeURIComponent(num))
+								var ea = await er.json()
+								if (Array.isArray(ea) && ea.length) {
+									var today = new Date()
+									var ds = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0')
+									var ef = ea.find(function(x) { return x.date && x.date.indexOf(ds) === 0 })
+									d2.data.emu_no = (ef && ef.emu_no) || ea[0].emu_no || ''
+								}
+							} catch(e3) {}
+							return d2.data
+						}
 					} catch(e){}
 					return null
 				}))
