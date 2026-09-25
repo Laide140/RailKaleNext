@@ -86,7 +86,9 @@ export default {
 		const sec = getKey('amap_sec')
 		const geo = encodeURIComponent(geoBase())
 		// #ifdef H5
-		this.mapUrl = location.origin + '/static/railway-map.html?key=' + encodeURIComponent(key) + '&sec=' + encodeURIComponent(sec) + '&geo=' + geo
+		// Resolve through the app base URL so deployments under a sub-path do not hit the origin root.
+		var mapPath = new URL('static/railway-map.html', document.baseURI).href
+		this.mapUrl = mapPath + '?key=' + encodeURIComponent(key) + '&sec=' + encodeURIComponent(sec) + '&geo=' + geo
 		// #endif
 		// #ifdef APP-PLUS
 		this.mapUrl = '/static/railway-map.html?app=1&key=' + encodeURIComponent(key) + '&sec=' + encodeURIComponent(sec) + '&geo=' + geo
