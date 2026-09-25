@@ -13,7 +13,7 @@ import { getApiBase } from '@/service/api.js'
 
 // GeoJSON 目录跟随 API 源设置
 function geoBase() {
-	return getApiBase('getTrainTimeTable/railway/index.php') + '/getTrainTimeTable/railway'
+	return getApiBase('getTrainTimeTable/railway/index.php') + '/getTrainTimeTable/railway/'
 }
 var FILE_LIST = [
 	'110000.geojson','120000.geojson','130000.geojson','140000.geojson','150000.geojson',
