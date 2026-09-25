@@ -57,6 +57,7 @@ var RAIL_ONLY = location.search.indexOf('rail=1') >= 0
 var IS_APP = location.search.indexOf('app=1') >= 0
 // GeoJSON 目录：优先使用加载页传入的地址（跟随 API 源设置），否则用本地相对目录
 var GEO_DIR = getParam('geo') || './railway/'
+if (GEO_DIR.charAt(GEO_DIR.length - 1) !== '/') GEO_DIR += '/'
 // API 根地址（从 GEO_DIR 推导：去掉 /getTrainTimeTable/railway 后缀）
 var API_BASE = GEO_DIR.replace(/\/getTrainTimeTable\/railway\/?$/, '')
 var FILE_LIST = ['110000.geojson','120000.geojson','130000.geojson','140000.geojson','150000.geojson','210000.geojson','220000.geojson','230000.geojson','310000.geojson','320000.geojson','330000.geojson','340000.geojson','350000.geojson','360000.geojson','370000.geojson','410000.geojson','420000.geojson','430000.geojson','440000.geojson','450000.geojson','460000.geojson','500000.geojson','510000.geojson','520000.geojson','530000.geojson','540000.geojson','610000.geojson','620000.geojson','630000.geojson','640000.geojson','650000.geojson','810000.geojson','820000.geojson']
