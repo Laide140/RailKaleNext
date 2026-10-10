@@ -65,6 +65,7 @@
 		<template v-if="homeLayout === 'custom'">
 			<view
 				class="section-card custom-card"
+				:class="{ 'has-bg': !!card.bgImage }"
 				v-for="card in customCards"
 				:key="card.id"
 				:style="customCardStyle(card)"
@@ -100,18 +101,16 @@
 	import { FEATURES, SECTIONS, getFeature } from '@/common/features.js'
 
 	export default {
-		computed: {
-			homeLayout() { return this.$store.state.settings.homeLayout },
-			customCards() { return this.$store.state.settings.customCards }
-		},
 		data() {
 			return {
 				sections: SECTIONS,
 				allFeatures: FEATURES,
-				searchText: '' 
+				searchText: ''
 			}
 		},
 		computed: {
+			homeLayout() { return this.$store.state.settings.homeLayout },
+			customCards() { return this.$store.state.settings.customCards },
 			// 最近查询过的车次（来自 Vuex 搜索历史）
 			recentTrains() {
 				const list = this.$store.state.searchHistory || []
@@ -237,24 +236,28 @@
 		}
 	}
 
-	/* ===== 自定义卡片：主题色 50% 透明背景 + 白色 3px 边框 + 无渐变遮罩 ===== */
+	/* ===== 自定义卡片：主题色淡底 + 白色 3px 边框 ===== */
 	.custom-card {
 		border: 3px solid #fff;
 		box-shadow: 0 2px 16px rgba(0,0,0,0.12);
 	}
-	.custom-card .card-overlay {
-		background: none;
-		background-image: none;
+	/* 自定义卡片设了背景图时，压一层中性白色渐变保证文字可读（非彩色遮罩） */
+	.custom-card.has-bg {
+		padding: 0;
+	}
+	.custom-card.has-bg .card-overlay {
+		background: linear-gradient(to bottom, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.92) 62%);
+		padding: 18px 20px 20px;
 	}
 
+	/* 卡片内容容器：卡片本身已有内边距，这里只做纵向排布。
+	 * 不能再绝对定位 —— 否则内容被 overflow:hidden 裁掉，
+	 * 且卡片高度不随内容增长（表现为「分区卡片显示不完全」） */
 	.card-overlay {
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(to bottom, transparent 30%, var(--card) 70%);
-		padding: 18px 20px 20px;
 		display: flex;
 		flex-direction: column;
-		justify-content: space-between;
+		width: 100%;
+		box-sizing: border-box;
 	}
 
 	.card-top {
