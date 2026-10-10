@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<!-- Profile -->
 		<view class="profile-card">
 			<view class="avatar"><image class="avatar-img" src="https://next.laide.net.cn/d7a80102a3f4bfad07fcab4685262dac.png"></image></view>
@@ -60,7 +60,7 @@
 			showAbout() {
 				uni.showModal({
 					title: '关于 RailKale: Next',
-					content: `铁路万花筒（RailKale: Next） v${version}\n\n综合铁路信息查询工具\n\n数据接口：自有 / RailGo\n动车组配属、交路查询：rail.re\n\n仅供个人学习参考使用`,
+					content: `铁路万花筒（RailKale: Next） v${version}\n\n综合铁路信息查询工具\n\n数据接口：全自有数据源（next.laide.net.cn）\n\n仅供个人学习参考使用`,
 					showCancel: false,
 					confirmText: '好'
 				})

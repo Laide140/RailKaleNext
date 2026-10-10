@@ -32,6 +32,12 @@
             }
         },
         {
+            "path": "pages/train-detail/train-detail",
+            "style": {
+                "navigationBarTitleText": "车次信息"
+            }
+        },
+        {
             "path": "pages/train-locate/train-locate",
             "style": {
                 "navigationBarTitleText": "列车实时位置"

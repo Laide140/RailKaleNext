@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<web-view :src="mapUrl"></web-view>
 		<view class="loading-badge" v-if="loadingText">
 			<text class="badge-province">{{ loadingText }}</text>

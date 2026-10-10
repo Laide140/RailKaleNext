@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<!-- 搜索表单 -->
 		<view class="search-form">
 			<view class="form-row">

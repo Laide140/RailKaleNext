@@ -1,5 +1,5 @@
 <template>
-	<view class="settings">
+	<view class="settings" :style="themeStyle">
 		<!-- 首页布局 -->
 		<view class="group">
 			<text class="group-title">首页布局</text>
@@ -27,7 +27,14 @@
 
 		<!-- API 源 -->
 		<view class="group">
-			<text class="group-title">API 源</text>
+			<view class="group-head">
+				<text class="group-title">API 源</text>
+				<text class="own-badge">
+					<i class="fas fa-shield-halved"></i>
+					<text>全自有数据源</text>
+				</text>
+			</view>
+			<text class="group-desc">车次、时刻表、站台、线路、实时位置、车组担当等数据均由自有服务器提供，不依赖第三方接口。</text>
 			<view class="api-options">
 				<view class="api-option" :class="{ active: apiSource === 'next' }" @tap="setApiSource('next')">
 					<view class="api-top">
@@ -50,21 +57,21 @@
 					<text class="api-host">rg-api.zenglingkun.cn</text>
 				</view>
 			</view>
-			<text class="api-hint">RailGo 仅支持车站大屏、检票口、线路图；其余功能自动使用新源数据。</text>
+			<text class="api-hint">RailGo 仅支持车站大屏、检票口、线路图；其余功能自动使用自有数据源。</text>
 		</view>
 
 		<!-- 主题色 -->
 		<view class="group">
 			<text class="group-title">主题色</text>
 			<view class="swatches">
-				<view class="swatch-wrap" v-for="(c, i) in presets" :key="i">
+				<view class="swatch-wrap" v-for="(c, i) in tonePresets" :key="i">
 					<view
 						class="swatch"
 						:style="{ backgroundColor: c }"
-						:class="{ selected: themeColor.toLowerCase() === c }"
+						:class="{ selected: sameColor(c, themeColor) }"
 						@tap="setTheme(c)"
 					>
-						<i v-if="themeColor.toLowerCase() === c" class="fas fa-check swatch-check"></i>
+						<i v-if="sameColor(c, themeColor)" class="fas fa-check swatch-check"></i>
 					</view>
 				</view>
 			</view>
@@ -132,16 +139,12 @@
 </template>
 
 <script>
-	import { hslToHex, hexToHsl } from '@/common/color.js'
+	import { hslToHex, hexToHsl, tint, shade, normalizeHex } from '@/common/color.js'
 	import { KEY_DEFS } from '@/common/keys.js'
 
 	export default {
 		data() {
 			return {
-				presets: [
-					'#007aff', '#34c759', '#ff9500', '#ff3b30', '#af52de',
-					'#5856d6', '#5ac8fa', '#ff2d55', '#00c7be', '#8e8e93'
-				],
 				pickerColor: '#007aff',
 				hsl: { h: 210, s: 100, l: 50 },
 				hexInput: '#007aff',
@@ -149,11 +152,27 @@
 			}
 		},
 		computed: {
+			// 推荐配色：以当前主题色为基准的同色系深浅（保证不引入新色相）
+			tonePresets() {
+				const base = normalizeHex(this.themeColor)
+				return [
+					shade(base, 0.45), shade(base, 0.25), base,
+					tint(base, 0.25), tint(base, 0.45), tint(base, 0.62)
+				]
+			},
 			homeLayout() { return this.$store.state.settings.homeLayout },
 			themeColor() { return this.$store.state.settings.themeColor },
 			apiSource() { return this.$store.state.settings.apiSource || 'next' },
 			customCards() { return this.$store.state.settings.customCards },
 			settingsKeys() { return this.$store.state.settings.keys || {} }
+		},
+		watch: {
+			themeColor(v) {
+				if (!v) return
+				this.pickerColor = v
+				this.hsl = hexToHsl(v)
+				this.hexInput = v
+			}
 		},
 		onLoad() {
 			const tc = this.themeColor
@@ -162,6 +181,9 @@
 			this.hexInput = tc
 		},
 		methods: {
+			sameColor(a, b) {
+				return normalizeHex(a) === normalizeHex(b)
+			},
 			setLayout(layout) {
 				this.$store.commit('setSettings', { homeLayout: layout })
 			},
@@ -214,9 +236,7 @@
 				uni.showToast({ title: '主题色已更新', icon: 'none' })
 			},
 			normalizeHex(v) {
-				let s = String(v || '').trim().replace('#', '')
-				if (/^[0-9a-fA-F]{3}$/.test(s)) s = s.split('').map(c => c + c).join('')
-				return /^[0-9a-fA-F]{6}$/.test(s) ? '#' + s.toLowerCase() : null
+				return normalizeHex(v)
 			},
 			goEditor() {
 				uni.navigateTo({ url: '/pages/custom-editor/custom-editor' })
@@ -284,6 +304,26 @@
 	}
 
 	/* ===== API 源 ===== */
+	.group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+	.group-head .group-title { margin-bottom: 0; }
+	/* 「全自有数据源」标注 */
+	.own-badge {
+		display: inline-flex; align-items: center; gap: 5px;
+		background: var(--theme-fill);
+		color: var(--theme-text);
+		font-size: 11px; font-weight: 600;
+		border-radius: 20px;
+		padding: 3px 10px;
+		margin-bottom: 8px;
+		i { font-size: 11px; color: var(--theme-text); }
+	}
+	.group-desc {
+		display: block;
+		font-size: 12px;
+		color: var(--secondary);
+		line-height: 1.5;
+		margin: 0 0 14px;
+	}
 	.api-options { display: flex; gap: 8px; }
 	.api-option {
 		flex: 1;

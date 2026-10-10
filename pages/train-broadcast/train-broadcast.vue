@@ -1,5 +1,5 @@
 <template>
-	<view class="broadcast" :class="{ 'source-baidu': source === 'baidu' }">
+	<view class="broadcast" :class="{ 'source-baidu': source === 'baidu' }" :style="themeStyle">
 		<!-- Header -->
 		<view class="header">
 			<view class="header-icon-wrap">

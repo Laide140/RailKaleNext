@@ -1,11 +1,11 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<web-view :src="mapUrl"></web-view>
 	</view>
 </template>
 
 <script>
-import { getApiBase } from '@/service/api.js'
+import { getApiBase, getTrainSetOfTrain } from '@/service/api.js'
 import { getKey } from '@/common/keys.js'
 export default {
 	data() { return { mapUrl: '', _timer: null } },
@@ -93,22 +93,9 @@ export default {
 				if (t && t.indexOf('EMU_REQ:') === 0) {
 					var train = t.substring(8)
 					var self = this
-					uni.request({
-						url: 'https://api.rail.re/train/' + encodeURIComponent(train),
-						responseType: 'text',
-						timeout: 10000,
-						success: function(r) {
-							try {
-								var arr = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
-								if (Array.isArray(arr) && arr.length) {
-									var d = new Date()
-									var ds = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')
-									var f = arr.find(function(x){return x.date && x.date.indexOf(ds)===0})
-									var emu = (f && f.emu_no) || arr[0].emu_no
-									if (emu) self.wv().evalJS('document.getElementById("trainInfoEmu").textContent="' + emu + '"')
-								}
-							} catch(e) {}
-						}
+					// 车组号来自自有数据源
+					getTrainSetOfTrain(train).then(function (emu) {
+						if (emu) self.wv().evalJS('document.getElementById("trainInfoEmu").textContent="' + emu + '"')
 					})
 				}
 			} catch(e) {}
@@ -164,16 +151,10 @@ export default {
 			// 查前5辆的车组号
 			var emuBatch = markers.slice(0, 5)
 			await Promise.all(emuBatch.map(function(m) {
-				return this.req('https://api.rail.re/train/' + encodeURIComponent(m.train), 10000).then(function(arr) {
-					if (Array.isArray(arr) && arr.length) {
-						var t = new Date()
-						var ds = t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0')
-						var f = arr.find(function(x){return x.date && x.date.indexOf(ds)===0})
-						if (f && f.emu_no) m.emu_no = f.emu_no
-						else if (arr[0].emu_no) m.emu_no = arr[0].emu_no
-					}
+				return getTrainSetOfTrain(m.train).then(function (trainSet) {
+					if (trainSet) m.emu_no = trainSet
 				}).catch(function(){})
-			}.bind(this)))
+			}))
 			console.log('[雷达] 定位 ' + markers.length + ' 辆')
 			if (markers.length) {
 				w.evalJS('clearTrainMarkers()')

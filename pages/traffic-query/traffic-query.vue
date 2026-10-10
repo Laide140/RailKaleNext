@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<view class="search-box">
 			<input class="search-input" v-model="station" placeholder="请输入车站名称，如：上海虹桥" @confirm="search" />
 			<button class="search-btn" @tap="search" :loading="loading">查询</button>

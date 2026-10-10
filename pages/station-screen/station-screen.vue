@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<!-- 车站选择 -->
 		<view class="search-box">
 			<text class="search-label">车站名称</text>

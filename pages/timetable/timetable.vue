@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<view class="train-info" v-if="trainInfo.train_number">
 			<view class="train-header">
 				<text class="train-no">{{ trainInfo.train_number }}</text>

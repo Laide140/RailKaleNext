@@ -30,7 +30,25 @@
 
 	:root {
 		--font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-		--blue: #007aff;
+
+		/* ===== 主题色令牌 =====
+		 * 仅用于 UI 装饰：图标、按钮、分区、选中态、链接。
+		 * 由「设置 → 主题色」决定，运行时由 applyTheme / themeStyle 覆写。
+		 *
+		 * 注意：状态色、线路色等「语义色」（车站大屏状态、地图线路、
+		 * 报警/错误提示）不在此列，必须保持各自原值 —— 那是信息，不是配色。
+		 */
+		--blue: #007aff;          /* 主题色（历史变量名，等价于 --theme） */
+		--theme: #007aff;
+		--theme-text: #007aff;    /* 白底上可读的主题色（图标 / 文字） */
+		--theme-strong: #0062cc;
+		--theme-soft: #cce4ff;
+		--theme-softer: #ebf4ff;
+		--theme-border: rgba(0, 122, 255, 0.22);
+		--theme-fill: rgba(0, 122, 255, 0.08);
+		--theme-fill-strong: rgba(0, 122, 255, 0.14);
+
+		/* ===== 中性色（浅色底 / 文字 / 分隔线）===== */
 		--bg: #f2f2f7;
 		--card: #ffffff;
 		--card2: #f8f8fa;
@@ -81,7 +99,7 @@
 
 	/* iOS-style pill button */
 	.btn-pill {
-		background: var(--blue);
+		background: var(--theme);
 		color: #fff;
 		border: none;
 		border-radius: 25px;

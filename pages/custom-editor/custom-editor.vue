@@ -1,5 +1,5 @@
 <template>
-	<view class="editor">
+	<view class="editor" :style="themeStyle">
 		<!-- 卡片列表（drop zone） -->
 		<view class="cards-area">
 			<view

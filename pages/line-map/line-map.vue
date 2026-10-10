@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<view class="search-box">
 			<text class="search-label">车次号</text>
 			<input class="search-input" v-model="train" placeholder="如：G1" @confirm="fetchLineMap" />

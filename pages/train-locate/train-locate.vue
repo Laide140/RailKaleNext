@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<view class="search-box">
 			<text class="search-label">车次号</text>
 			<input class="search-input" v-model="train" placeholder="如：D190" @confirm="fetchLocation" />
@@ -79,7 +79,7 @@
 </template>
 
 <script>
-	import { getTrainLocate } from '@/service/api.js'
+	import { getTrainLocate, getTrainSetOfTrain } from '@/service/api.js'
 	import { getKey } from '@/common/keys.js'
 
 	export default {
@@ -142,7 +142,7 @@
 				try {
 					await this.query()
 					// 查询成功后拉取车组担当号
-					this.fetchEmu(this.train.trim())
+					await this.fetchEmu(this.train.trim())
 				} finally {
 					this.loading = false
 				}
@@ -170,24 +170,10 @@
 				}
 			},
 
-			fetchEmu(train) {
-			var self = this
-			uni.request({
-				url: 'https://api.rail.re/train/' + encodeURIComponent(train),
-				responseType: 'text',
-				success: function(r) {
-					try {
-						var arr = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
-						if (Array.isArray(arr) && arr.length) {
-							var today = new Date()
-							var ds = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0')
-							var f = arr.find(function(x){return x.date && x.date.indexOf(ds)===0})
-							self.emu = (f && f.emu_no) || arr[0].emu_no
-						}
-					} catch(e) {}
-				}
-			})
-		},
+			// 查询担当车组号（自有数据源）
+			async fetchEmu(train) {
+				this.emu = await getTrainSetOfTrain(train)
+			},
 
 		startPolling() {
 				this.stopPolling()

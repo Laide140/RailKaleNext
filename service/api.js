@@ -13,6 +13,7 @@
 
 import { getKey } from '@/common/keys.js'
 import { getApiSource } from '@/common/settings.js'
+import { getTelecode } from '@/common/station.js'
 
 const NEXT_BASE = 'https://next.laide.net.cn/api'
 const OLD_BASE = 'https://rail.laide.asia/api'
@@ -272,6 +273,131 @@ export function getAmapStaticMap(size, markers, paths) {
 }
 
 /**
+ * 车组运用数据（车次 ↔ 车组号 担当关系）— 自有数据源
+ * GET /getTrainData/?train={车次或车组号}
+ *
+ * 服务端按入参自动判断返回形态：
+ *   传车次（G1）              → data 为对象 { train, trainSet, type }
+ *   传车组（CR400BF-A-5054）  → data 为数组 [{ train, trainSet, type }, ...]
+ *
+ * @param {'train'|'emu'} mode
+ * @param {string} value 车次号或车组号
+ * @returns {Promise<{list: Array, single: Object|null}>}
+ */
+export function getTrainData(mode, value) {
+	return new Promise((resolve) => {
+		uni.request({
+			url: NEXT_BASE + '/getTrainData/?train=' + encodeURIComponent(value),
+			responseType: 'text',
+			timeout: 15000,
+			success: (r) => {
+				try {
+					const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					if (!res || res.code !== 200) return resolve({ list: [], single: null })
+					const data = res.data
+					if (Array.isArray(data)) return resolve({ list: data.filter(Boolean), single: null })
+					return resolve({ list: data ? [data] : [], single: data || null })
+				} catch (e) {
+					resolve({ list: [], single: null })
+				}
+			},
+			fail: () => resolve({ list: [], single: null })
+		})
+	})
+}
+
+/**
+ * 查询某车次的担当车组号
+ * @param {string} train
+ * @returns {Promise<string>}
+ */
+export async function getTrainSetOfTrain(train) {
+	const res = await getTrainData('train', train)
+	if (res.single && res.single.trainSet) return res.single.trainSet
+	return (res.list[0] && res.list[0].trainSet) || ''
+}
+
+/**
+ * 查询某车组担当的全部车次
+ * @param {string} trainSet 车组号，如 CR400BF-A-5054
+ * @returns {Promise<Array>}
+ */
+export async function getTrainsOfTrainSet(trainSet) {
+	const res = await getTrainData('emu', trainSet)
+	return res.list
+}
+
+/**
+ * 车次综合信息（时刻表 + 停台 + 线路 + 实时位置 + 担当车组）
+ *
+ * 全部为自有数据源，各子项互不阻塞：任一失败只影响对应区块。
+ *
+ * @param {string} train 车次号，如 G1
+ * @param {string} [date] 日期 YYYY-MM-DD，默认今天
+ */
+export async function getTrainDetail(train, date) {
+	const trainNo = String(train || '').trim().toUpperCase()
+	const d = date ? new Date(date) : new Date()
+	const day = date || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+	const result = {
+		train: trainNo,
+		date: day,
+		timetable: null,
+		platformMap: {},
+		line: null,
+		locate: null,
+		trainSet: '',
+		trainSetTrains: []
+	}
+
+	const [tt, line, loc, td] = await Promise.all([
+		getTrainTimeTable(trainNo, day).catch(() => null),
+		getMapLine(trainNo).catch(() => null),
+		getTrainLocate(trainNo).catch(() => null),
+		getTrainData('train', trainNo)
+	])
+
+	if (tt && tt.code === 0 && tt.data) result.timetable = tt.data
+	if (line && line.success && line.data) result.line = line.data
+	if (loc && loc.code === 0) result.locate = loc.data || null
+	result.trainSet = (td.single && td.single.trainSet) || (td.list[0] && td.list[0].trainSet) || ''
+
+	// 每个停靠站的站台（站名 → 电报码 → 检票口接口）
+	const stops = (result.timetable && result.timetable.stops) || []
+	if (stops.length) result.platformMap = await fetchPlatforms(trainNo, stops)
+
+	// 该车组担当的全部车次
+	if (result.trainSet) result.trainSetTrains = await getTrainsOfTrainSet(result.trainSet)
+
+	return result
+}
+
+/**
+ * 批量查询某车次在各站的停靠站台
+ */
+async function fetchPlatforms(trainNo, stops) {
+	const map = {}
+	await Promise.all(stops.map(async (stop) => {
+		const name = stop && stop.station_name
+		if (!name || map[name]) return
+		try {
+			const telecode = await getTelecode(name)
+			if (!telecode) return
+			const res = await getExit(trainNo, telecode)
+			if (res && res.success && res.data) {
+				map[name] = {
+					platform: res.data.platform || '',
+					entrance: res.data.entrance || [],
+					exit: res.data.exit || []
+				}
+			}
+		} catch (e) {}
+	}))
+	return map
+}
+
+/**
  * 解析车站代码数据
  */
 export function parseStationCode(rawData) {
@@ -328,6 +454,10 @@ export default {
 	getRailwayIndex,
 	getRailwayGeoJSON,
 	getAmapStaticMap,
+	getTrainData,
+	getTrainSetOfTrain,
+	getTrainsOfTrainSet,
+	getTrainDetail,
 	parseStationCode,
 	getTrainBroadcastUrl,
 	getBaiduTtsUrl

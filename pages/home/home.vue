@@ -1,9 +1,22 @@
 <template>
-	<view class="home">
-		<!-- 搜索栏 -->
-		<view class="search-section" @click="goToPage('train-query')">
+	<view class="home" :style="themeStyle">
+		<!-- 顶部搜索框：输入车次，进入车次综合信息页 -->
+		<view class="search-section">
 			<i class="fas fa-search search-icon"></i>
-			<text class="search-text">查车次、查车站、查时刻...</text>
+			<input
+				class="search-input"
+				v-model="searchText"
+				placeholder="输入车次，如 G1"
+				placeholder-class="search-placeholder"
+				confirm-type="search"
+				@confirm="doSearch"
+			/>
+			<text class="search-cancel" v-if="searchText" @click="searchText = ''">✕</text>
+			<view class="search-btn" @click="doSearch">搜索</view>
+		</view>
+		<view class="quick-trains" v-if="recentTrains.length">
+			<text class="quick-label">最近</text>
+			<text class="quick-chip" v-for="t in recentTrains" :key="t" @click="goTrainDetail(t)">{{ t }}</text>
 		</view>
 
 		<!-- 模式一：分区卡片 -->
@@ -12,12 +25,11 @@
 				class="section-card"
 				v-for="sec in sections"
 				:key="sec.id"
-				:style="{ backgroundImage: 'url(' + sec.bgImage + ')' }"
 				@click="goToSection(sec.id)"
 			>
 				<view class="card-overlay">
 					<view class="card-top">
-						<view class="card-icon" :style="{ backgroundColor: sec.badgeColor }">
+						<view class="card-icon">
 							<i class="fas" :class="sec.icon"></i>
 						</view>
 						<text class="card-arrow">›</text>
@@ -40,7 +52,7 @@
 				</view>
 				<view class="grid">
 					<view class="grid-item" v-for="fid in sec.features" :key="fid" @click="goToPage(featurePath(fid))">
-						<view class="grid-icon" :style="{ backgroundColor: featureColor(fid) }">
+						<view class="grid-icon">
 							<i class="fas grid-icon-text" :class="featureIcon(fid)"></i>
 						</view>
 						<text class="grid-label">{{ featureLabel(fid) }}</text>
@@ -60,7 +72,7 @@
 			>
 				<view class="card-overlay">
 					<view class="card-top">
-						<view class="card-icon" :style="{ backgroundColor: card.color }">
+						<view class="card-icon">
 							<i class="fas fa-th-large"></i>
 						</view>
 						<text class="card-arrow">›</text>
@@ -96,13 +108,41 @@
 			return {
 				sections: SECTIONS,
 				allFeatures: FEATURES,
+				searchText: '' 
+			}
+		},
+		computed: {
+			// 最近查询过的车次（来自 Vuex 搜索历史）
+			recentTrains() {
+				const list = this.$store.state.searchHistory || []
+				const seen = []
+				for (const item of list) {
+					const no = typeof item === 'string' ? item : (item && (item.train || item.trainNo))
+					if (no && seen.indexOf(no) < 0) seen.push(no)
+					if (seen.length >= 6) break
+				}
+				return seen
 			}
 		},
 		methods: {
 			featureIcon(id) { const f = getFeature(id); return f ? f.icon : 'fa-question' },
 			featureLabel(id) { const f = getFeature(id); return f ? f.label : id },
 			featurePath(id) { const f = getFeature(id); return f ? f.path : id },
-			featureColor(id) { const f = getFeature(id); return f ? f.color : '#007aff' },
+
+			// 顶部搜索：输入车次 → 车次综合信息页
+			doSearch() {
+				const no = String(this.searchText || '').trim().toUpperCase()
+				if (!no) {
+					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					return
+				}
+				this.goTrainDetail(no)
+			},
+			goTrainDetail(trainNo) {
+				if (!trainNo) return
+				this.$store.commit('addSearchHistory', { train: trainNo, time: Date.now() })
+				uni.navigateTo({ url: `/pages/train-detail/train-detail?train=${encodeURIComponent(trainNo)}` })
+			},
 			customCardStyle(card) {
 				if (card.bgImage) {
 					return {
@@ -112,29 +152,8 @@
 						transform: 'translateZ(0)'
 					}
 				}
-				const color = card.color || this.getThemeColor() || '#007aff'
-				return { backgroundColor: this.hexToRgba(color, 0.5) }
-			},
-			// 主题色（应用全局主题色）
-			getThemeColor() {
-				return (this.$store && this.$store.state && this.$store.state.settings && this.$store.state.settings.themeColor) || '#007aff'
-			},
-			// 十六进制颜色转 rgba（带透明度）
-			hexToRgba(hex, alpha) {
-				let c = String(hex || '').trim()
-				// 已是 rgba 或 rgb，返回原样（附 alpha 覆盖）
-				if (/^rgba?\(/.test(c)) {
-					if (c.indexOf('rgba') === 0) return c
-					return c.replace(/^rgb\(/, 'rgba(').replace(/\)$/, `,${alpha})`)
-				}
-				if (c.indexOf('#') === 0) c = c.slice(1)
-				if (c.length === 3) c = c.split('').map(ch => ch + ch).join('')
-				if (c.length !== 6) return `rgba(0,122,255,${alpha})`
-				const int = parseInt(c, 16)
-				const r = (int >> 16) & 255
-				const g = (int >> 8) & 255
-				const b = int & 255
-				return `rgba(${r},${g},${b},${alpha})`
+				// 无背景图时统一使用主题色淡底（不再逐卡片配色）
+				return { backgroundColor: 'var(--theme-soft)' }
 			},
 			goToPage(path) {
 				const url = `/pages/${path}/${path}`
@@ -170,24 +189,46 @@
 		display: flex; align-items: center; gap: 10px;
 		background: var(--card);
 		backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-		border-radius: 12px; padding: 14px 16px; margin: 16px 0 16px;
+		border-radius: 12px; padding: 10px 10px 10px 16px; margin: 16px 0 10px;
 		box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-		border: 0.5px solid var(--separator);
+		border: 1px solid var(--theme-border);
 	}
-	.search-icon { font-size: 18px; color: var(--secondary); }
-	.search-text { font-size: 17px; color: var(--secondary); flex: 1; }
+	.search-icon { font-size: 17px; color: var(--theme-text); }
+	.search-input { flex: 1; font-size: 17px; color: var(--label); height: 38px; }
+	.search-placeholder { color: var(--secondary); }
+	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 6px; }
+	.search-btn {
+		flex-shrink: 0;
+		background: var(--theme);
+		color: #fff;
+		font-size: 15px;
+		font-weight: 600;
+		border-radius: 10px;
+		padding: 8px 16px;
+		line-height: 1.2;
+	}
+	.quick-trains { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+	.quick-label { font-size: 12px; color: var(--secondary); }
+	.quick-chip {
+		font-size: 13px; font-weight: 600;
+		color: var(--theme-text);
+		background: var(--theme-fill);
+		border-radius: 20px;
+		padding: 3px 12px;
+	}
 
 	/* ===== Section Card ===== */
 	.section-card {
 		position: relative;
-		height: 200px;
 		border-radius: 16px;
 		overflow: hidden;
 		margin-bottom: 14px;
-		background-size: cover;
-		background-position: center;
-		background-color: #fff;
-		box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+		padding: 18px 20px 20px;
+		background: var(--card);
+		border: 1px solid var(--theme-border);
+		box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+		display: flex;
+		flex-direction: column;
 		transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.25s;
 
 		&:active {
@@ -220,6 +261,7 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: flex-start;
+		margin-bottom: 10px;
 	}
 
 	.card-icon {
@@ -229,7 +271,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+		background: var(--theme);
 		i { font-size: 20px; color: #fff; }
 	}
 
@@ -262,10 +304,10 @@
 
 	.card-tag {
 		padding: 3px 10px;
-		background: var(--separator);
+		background: var(--theme-fill);
 		border-radius: 20px;
 		font-size: 11px;
-		color: var(--secondary);
+		color: var(--theme-text);
 		font-weight: 500;
 	}
 
@@ -275,7 +317,7 @@
 		display: flex; align-items: center; gap: 8px;
 		font-size: 15px; font-weight: 700; color: var(--label);
 		margin-bottom: 10px; padding-left: 4px;
-		i { color: var(--blue); font-size: 15px; }
+		i { color: var(--theme-text); font-size: 15px; }
 	}
 	.grid {
 		display: flex; flex-wrap: wrap;
@@ -284,8 +326,13 @@
 		box-shadow: 0 1px 3px rgba(0,0,0,0.06);
 	}
 	.grid-item { width: 25%; display: flex; flex-direction: column; align-items: center; padding: 14px 0; }
-	.grid-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
-	.grid-icon-text { font-size: 18px; color: #fff; }
+	.grid-icon {
+		width: 36px; height: 36px; border-radius: 10px;
+		display: flex; align-items: center; justify-content: center;
+		margin-bottom: 6px;
+		background: var(--theme-fill);
+	}
+	.grid-icon-text { font-size: 18px; color: var(--theme-text); }
 	.grid-label { font-size: 12px; color: var(--label); font-weight: 500; }
 
 	/* ===== Custom mode empty ===== */

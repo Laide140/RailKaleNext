@@ -3,6 +3,8 @@
  * 首页布局 / 主题色 / API 源 / 自定义卡片 的读写与持久化
  */
 
+import { applyThemeVars } from '@/common/color.js'
+
 export const SETTINGS_KEY = 'app_settings'
 
 export const DEFAULT_SETTINGS = {
@@ -36,14 +38,15 @@ export function saveSettings(settings) {
 
 /**
  * 应用主题色到全局 CSS 变量
+ *
+ * 仅 H5 生效（App 端没有 document）。App 端的主题由页面根节点
+ * :style="themeStyle" 绑定，见 main.js 的全局 mixin。
+ *
  * @param {string} color - 十六进制颜色
  */
 export function applyTheme(color) {
-	try {
-		if (typeof document !== 'undefined' && document.documentElement) {
-			document.documentElement.style.setProperty('--blue', color)
-		}
-	} catch (e) {}
+	if (!color) return
+	applyThemeVars(color)
 }
 
 /**

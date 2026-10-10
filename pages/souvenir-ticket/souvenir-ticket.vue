@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<view class="form-card">
 			<view class="form-row">
 				<view class="form-group half">

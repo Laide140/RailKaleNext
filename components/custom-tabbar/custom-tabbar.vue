@@ -1,5 +1,5 @@
 <template>
-	<view class="tabbar">
+	<view class="tabbar" :style="themeStyle">
 		<view class="tabbar-bg"></view>
 		<view class="tabbar-item" v-for="(tab, i) in tabs" :key="i" :class="{ active: activeTab === tab.page }" @tap="switchTab(tab.page)">
 			<i class="tabbar-icon fas" :class="tab.icon" :style="activeTab === tab.page ? { color: themeColor } : ''"></i>

@@ -1,5 +1,5 @@
 <template>
-	<view class="detail">
+	<view class="detail" :style="themeStyle">
 		<view class="hero" :style="heroStyle">
 			<view class="hero-overlay">
 				<view class="hero-icon" :style="{ backgroundColor: section.badgeColor }">

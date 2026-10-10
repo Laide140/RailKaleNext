@@ -1,5 +1,5 @@
 <template>
-	<view class="about">
+	<view class="about" :style="themeStyle">
 		<view class="content">
 			<view class="qrcode">
 				<image src="https://img.cdn.aliyun.dcloud.net.cn/guide/uniapp/app_download.png" @longtap="save"></image>

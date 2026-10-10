@@ -1,0 +1,624 @@
+<template>
+	<view class="page" :style="themeStyle">
+		<!-- 顶部搜索框 -->
+		<view class="search-section">
+			<i class="fas fa-search search-icon"></i>
+			<input
+				class="search-input"
+				v-model="searchText"
+				placeholder="输入车次，如 G1"
+				placeholder-class="search-placeholder"
+				confirm-type="search"
+				@confirm="doSearch"
+			/>
+			<text class="search-cancel" v-if="searchText" @click="searchText = ''">✕</text>
+			<view class="search-btn" @click="doSearch">查询</view>
+		</view>
+
+		<!-- 车次标题 -->
+		<view class="hero" v-if="trainNo">
+			<view class="hero-main">
+				<text class="hero-no">{{ trainNo }}</text>
+				<view class="hero-route" v-if="origin">
+					<text class="hero-route-text">{{ origin }}</text>
+					<text class="hero-arrow">→</text>
+					<text class="hero-route-text">{{ destination }}</text>
+				</view>
+			</view>
+			<view class="hero-meta">
+				<text class="hero-meta-item" v-if="date">{{ date }}</text>
+				<text class="hero-meta-item" v-if="stops.length">共 {{ stops.length }} 站</text>
+				<text class="hero-meta-item" v-if="departTime && arriveTime">{{ departTime }} - {{ arriveTime }}</text>
+			</view>
+			<view class="hero-status" v-if="statusText">
+				<i class="fas" :class="isRunning ? 'fa-train' : 'fa-circle-info'"></i>
+				<text>{{ statusText }}</text>
+			</view>
+		</view>
+
+		<!-- 三个 Tab -->
+		<view class="tabs">
+			<view
+				class="tab"
+				v-for="t in tabs"
+				:key="t.key"
+				:class="{ active: activeTab === t.key }"
+				@click="activeTab = t.key"
+			>
+				<text class="tab-label">{{ t.label }}</text>
+				<view class="tab-bar" v-if="activeTab === t.key"></view>
+			</view>
+		</view>
+
+		<view class="loading-state" v-if="loading">
+			<view class="spinner"></view>
+			<text>正在查询 {{ trainNo }} 次列车...</text>
+		</view>
+
+		<!-- ===== Tab 1：时刻 ===== -->
+		<view class="tab-panel" v-if="!loading && activeTab === 'time'">
+			<view class="empty-state" v-if="!stops.length">
+				<i class="fas fa-calendar-alt empty-icon"></i>
+				<text>未获取到时刻表数据</text>
+			</view>
+			<view class="stops" v-else>
+				<view class="stop" v-for="(stop, index) in stops" :key="index" :class="{ current: isCurrentStop(stop) }">
+					<view class="stop-rail">
+						<view class="stop-dot" :class="{ terminal: index === 0 || index === stops.length - 1 }"></view>
+						<view class="stop-line" v-if="index < stops.length - 1"></view>
+					</view>
+					<view class="stop-body">
+						<view class="stop-head">
+							<text class="stop-name">{{ stop.station_name }}</text>
+							<text class="stop-badge" v-if="isCurrentStop(stop)">当前</text>
+							<!-- 每站右侧显示停靠站台 -->
+							<text class="stop-platform" v-if="platformOf(stop)">停靠 {{ platformOf(stop) }} 站台</text>
+						</view>
+						<view class="stop-times">
+							<view class="stop-time">
+								<text class="stop-time-label">到达</text>
+								<text class="stop-time-value">{{ stop.arrive_time || '—' }}</text>
+							</view>
+							<view class="stop-time">
+								<text class="stop-time-label">出发</text>
+								<text class="stop-time-value">{{ stop.depart_time || '—' }}</text>
+							</view>
+							<view class="stop-time" v-if="stop.stopover_display">
+								<text class="stop-time-label">停靠</text>
+								<text class="stop-time-value">{{ stop.stopover_display }}</text>
+							</view>
+						</view>
+						<view class="stop-extra" v-if="entranceOf(stop)">
+							<text class="stop-extra-text">{{ entranceOf(stop) }}</text>
+						</view>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<!-- ===== Tab 2：运行 ===== -->
+		<view class="tab-panel" v-if="!loading && activeTab === 'run'">
+			<view class="card">
+				<view class="card-head">
+					<i class="fas fa-location-dot card-icon"></i>
+					<text class="card-title">当前位置</text>
+					<text class="card-live" v-if="polling">实时</text>
+				</view>
+				<view class="empty-inline" v-if="!locate">
+					<text>列车尚未发车或已到达终点，暂无实时位置</text>
+				</view>
+				<view v-else>
+					<view class="kv">
+						<text class="kv-label">状态</text>
+						<text class="kv-value">{{ statusText }}</text>
+					</view>
+					<view class="kv">
+						<text class="kv-label">进度</text>
+						<text class="kv-value">{{ locate.progress || '—' }}</text>
+					</view>
+					<view class="kv" v-if="locate.station">
+						<text class="kv-label">最近车站</text>
+						<text class="kv-value">{{ locate.station }}</text>
+					</view>
+					<view class="kv" v-if="locate.segment">
+						<text class="kv-label">本段区间</text>
+						<text class="kv-value">{{ locate.segment.depart_time }} - {{ locate.segment.arrive_time }}</text>
+					</view>
+					<view class="kv" v-if="positionText">
+						<text class="kv-label">坐标</text>
+						<text class="kv-value">{{ positionText }}</text>
+					</view>
+					<text class="card-note" v-if="locate.time">{{ locate.time }}</text>
+				</view>
+			</view>
+
+			<view class="card">
+				<view class="card-head">
+					<i class="fas fa-route card-icon"></i>
+					<text class="card-title">路径地图</text>
+					<text class="card-live" v-if="lineData">共 {{ stationNames.length }} 站</text>
+				</view>
+				<view class="empty-inline" v-if="!lineData">
+					<text>未获取到线路数据</text>
+				</view>
+				<template v-else>
+					<image class="map-image" :src="staticMapUrl" mode="widthFix" v-if="staticMapUrl"></image>
+					<view class="legend">
+						<view class="legend-item"><view class="legend-dot legend-station"></view><text>途经车站</text></view>
+						<view class="legend-item" v-if="position"><view class="legend-dot legend-train"></view><text>列车当前位置</text></view>
+					</view>
+					<view class="station-chips">
+						<text class="station-chip" v-for="(s, i) in stationNames" :key="i">{{ s }}</text>
+					</view>
+				</template>
+			</view>
+		</view>
+
+		<!-- ===== Tab 3：列车 ===== -->
+		<view class="tab-panel" v-if="!loading && activeTab === 'train'">
+			<view class="card">
+				<view class="card-head">
+					<i class="fas fa-subway card-icon"></i>
+					<text class="card-title">担当车组</text>
+				</view>
+				<view class="empty-inline" v-if="!trainSet">
+					<text>未查到该车次的担当车组</text>
+				</view>
+				<view v-else class="emu-block" @click="goEmuDetail(trainSet)">
+					<view class="emu-main">
+						<text class="emu-no">{{ trainSet }}</text>
+						<text class="emu-model">{{ emuModel }}</text>
+					</view>
+					<i class="fas fa-chevron-right emu-arrow"></i>
+				</view>
+				<text class="card-note" v-if="trainSet">点击车型可查询该车组的全部运用车次</text>
+			</view>
+
+			<view class="card" v-if="trainSet">
+				<view class="card-head">
+					<i class="fas fa-list card-icon"></i>
+					<text class="card-title">{{ trainSet }} 担当车次</text>
+					<text class="card-live" v-if="trainSetTrains.length">共 {{ trainSetTrains.length }} 趟</text>
+				</view>
+				<view class="empty-inline" v-if="!trainSetTrains.length">
+					<text>未查到该车组担当的其他车次</text>
+				</view>
+				<view class="train-list" v-else>
+					<view
+						class="train-row"
+						v-for="(r, i) in trainSetTrains"
+						:key="i"
+						:class="{ current: r.train === trainNo }"
+						@click="goTrainDetail(r.train)"
+					>
+						<text class="train-row-no">{{ r.train }}</text>
+						<text class="train-row-tag" v-if="r.train === trainNo">当前</text>
+						<text class="train-row-type" v-else>{{ r.type }}</text>
+						<i class="fas fa-chevron-right train-row-arrow"></i>
+					</view>
+				</view>
+			</view>
+		</view>
+
+		<view class="empty-state big" v-if="!trainNo && !loading">
+			<i class="fas fa-train empty-icon"></i>
+			<text>输入车次号，查看时刻、运行与担当信息</text>
+		</view>
+	</view>
+</template>
+
+<script>
+	import { getTrainDetail, getTrainLocate, getAmapStaticMap } from '@/service/api.js'
+
+	export default {
+		data() {
+			return {
+				searchText: '',
+				trainNo: '',
+				date: '',
+				loading: false,
+				activeTab: 'time',
+
+				timetable: null,
+				platformMap: {},
+				lineData: null,
+				locate: null,
+				trainSet: '',
+				trainSetTrains: [],
+
+				polling: false,
+				_pollTimer: null
+			}
+		},
+		computed: {
+			tabs() {
+				return [
+					{ key: 'time', label: '时刻' },
+					{ key: 'run', label: '运行' },
+					{ key: 'train', label: '列车' }
+				]
+			},
+			stops() { return (this.timetable && this.timetable.stops) || [] },
+			origin() { return (this.timetable && this.timetable.origin) || '' },
+			destination() { return (this.timetable && this.timetable.destination) || '' },
+			departTime() { return (this.timetable && this.timetable.depart_time) || '' },
+			arriveTime() { return (this.timetable && this.timetable.arrive_time) || '' },
+			isRunning() { return !!(this.locate && this.locate.status === 'running') },
+			statusText() {
+				if (!this.locate) return ''
+				if (this.locate.status === 'running') return '运行中'
+				if (this.locate.status === 'arrived') return '已到达'
+				return '等待中'
+			},
+			position() {
+				const p = this.locate && this.locate.position
+				if (!p) return null
+				const lng = p.gcj02_lng || p.lng
+				const lat = p.gcj02_lat || p.lat
+				return (lng && lat) ? { lng, lat } : null
+			},
+			positionText() {
+				if (!this.position) return ''
+				return `${Number(this.position.lng).toFixed(4)}, ${Number(this.position.lat).toFixed(4)}`
+			},
+			stationNames() {
+				if (!this.lineData || !this.lineData.stations) return []
+				return this.lineData.stations.map(s => Object.keys(s)[0])
+			},
+			// CR400BF-A-5054 → CR400BF-A
+			emuModel() {
+				if (!this.trainSet) return ''
+				const m = String(this.trainSet).match(/^(.*?)-\d+$/)
+				return m ? m[1] : this.trainSet
+			},
+			routePoints() {
+				const train = (this.lineData && this.lineData.train) || {}
+				const segs = Object.keys(train)
+					.map(k => ({ index: (train[k] && train[k].index) || 0, line: (train[k] && train[k].line) || [] }))
+					.sort((a, b) => a.index - b.index)
+				const out = []
+				for (const seg of segs) {
+					for (const p of seg.line) out.push(`${p[0].toFixed(4)},${p[1].toFixed(4)}`)
+				}
+				return out
+			},
+			// 高德静态图：路径 + 车站标记 + 列车位置。
+			// 同组 markers 必须写在一条里且 label 不能省略（省略会报 20003）
+			staticMapUrl() {
+				if (!this.lineData) return ''
+				const pts = this.routePoints
+				if (pts.length < 2) return ''
+				const coords = []
+				if (this.position) coords.push(`${this.position.lng},${this.position.lat}`)
+				coords.push(...stationCoordStrs(this.lineData).split(';').filter(Boolean))
+				const parts = [
+					`markers=${encodeURIComponent('mid,0x007AFF,0:' + coords.join(';'))}`,
+					`paths=${encodeURIComponent('7,0x007AFF,1,,:' + pts.join(';'))}`
+				]
+				return getAmapStaticMap('750*500', null, null) + '&' + parts.join('&')
+			}
+		},
+		onLoad(options) {
+			const train = options && options.train ? decodeURIComponent(options.train) : ''
+			this.date = options && options.date ? options.date : formatToday()
+			if (train) {
+				this.searchText = train
+				this.setTrain(train)
+			}
+		},
+		onUnload() { this.stopPolling() },
+		onHide() { this.stopPolling() },
+		methods: {
+			platformOf(stop) {
+				const p = this.platformMap[stop.station_name]
+				return (p && p.platform) || ''
+			},
+			entranceOf(stop) {
+				const p = this.platformMap[stop.station_name]
+				if (!p || !p.entrance || !p.entrance.length) return ''
+				return p.entrance.join(' · ')
+			},
+			isCurrentStop(stop) {
+				if (!this.locate || !this.locate.station) return false
+				return stop.station_name === this.locate.station
+			},
+			doSearch() {
+				const no = String(this.searchText || '').trim().toUpperCase()
+				if (!no) {
+					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					return
+				}
+				this.setTrain(no)
+			},
+			goTrainDetail(trainNo) {
+				if (!trainNo) return
+				const no = String(trainNo).trim().toUpperCase()
+				if (no === this.trainNo) return
+				this.searchText = no
+				this.setTrain(no)
+			},
+			goEmuDetail(trainSet) {
+				if (!trainSet) return
+				uni.navigateTo({
+					url: `/pages/emu-query/emu-query?mode=emu&q=${encodeURIComponent(trainSet)}`
+				})
+			},
+			async setTrain(trainNo) {
+				this.stopPolling()
+				this.trainNo = trainNo
+				this.loading = true
+				this.reset()
+				this.$store.commit('addSearchHistory', { train: trainNo, time: Date.now() })
+				uni.setNavigationBarTitle({ title: `${trainNo} 次列车` })
+				try {
+					const res = await getTrainDetail(trainNo, this.date)
+					this.timetable = res.timetable
+					this.platformMap = res.platformMap || {}
+					this.lineData = res.line
+					this.locate = res.locate
+					this.trainSet = res.trainSet
+					this.trainSetTrains = res.trainSetTrains || []
+					if (!res.timetable && !res.line && !res.locate) {
+						uni.showToast({ title: '未查询到该车次', icon: 'none' })
+					}
+					if (this.isRunning) this.startPolling()
+				} catch (e) {
+					uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+				} finally {
+					this.loading = false
+				}
+			},
+			reset() {
+				this.timetable = null
+				this.platformMap = {}
+				this.lineData = null
+				this.locate = null
+				this.trainSet = ''
+				this.trainSetTrains = []
+			},
+			startPolling() {
+				this.stopPolling()
+				this.polling = true
+				this._pollTimer = setInterval(async () => {
+					try {
+						const res = await getTrainLocate(this.trainNo)
+						if (res && res.code === 0 && res.data) {
+							this.locate = res.data
+							if (res.data.status !== 'running') this.stopPolling()
+						}
+					} catch (e) {}
+				}, 10000)
+			},
+			stopPolling() {
+				this.polling = false
+				if (this._pollTimer) {
+					clearInterval(this._pollTimer)
+					this._pollTimer = null
+				}
+			}
+		}
+	}
+
+	function formatToday() {
+		const d = new Date()
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	}
+
+	function stationCoordStrs(lineData) {
+		if (!lineData || !lineData.stations) return ''
+		return lineData.stations
+			.map(s => {
+				const c = Object.values(s)[0]
+				return c ? `${c[0].toFixed(4)},${c[1].toFixed(4)}` : null
+			})
+			.filter(Boolean)
+			.join(';')
+	}
+</script>
+
+<style lang="scss">
+	.page {
+		min-height: 100vh;
+		background: var(--bg);
+		padding: 16px 16px 40px;
+	}
+
+	/* ===== 搜索 ===== */
+	.search-section {
+		display: flex; align-items: center; gap: 10px;
+		background: var(--card);
+		border-radius: 12px;
+		padding: 10px 10px 10px 16px;
+		margin-bottom: 14px;
+		border: 1px solid var(--theme-border);
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	}
+	.search-icon { font-size: 17px; color: var(--theme-text); }
+	.search-input { flex: 1; font-size: 17px; color: var(--label); height: 38px; }
+	.search-placeholder { color: var(--secondary); }
+	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 6px; }
+	.search-btn {
+		flex-shrink: 0;
+		background: var(--theme);
+		color: #fff;
+		font-size: 15px;
+		font-weight: 600;
+		border-radius: 10px;
+		padding: 8px 16px;
+	}
+
+	/* ===== 车次标题 ===== */
+	.hero {
+		background: var(--theme);
+		border-radius: 16px;
+		padding: 18px 20px;
+		margin-bottom: 14px;
+	}
+	.hero-main { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+	.hero-no { font-size: 30px; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
+	.hero-route { display: flex; align-items: center; gap: 6px; }
+	.hero-route-text { font-size: 15px; color: #fff; opacity: 0.95; }
+	.hero-arrow { font-size: 14px; color: #fff; opacity: 0.8; }
+	.hero-meta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; }
+	.hero-meta-item { font-size: 13px; color: #fff; opacity: 0.85; }
+	.hero-status {
+		display: inline-flex; align-items: center; gap: 6px;
+		margin-top: 12px; padding: 4px 12px;
+		border-radius: 20px;
+		background: rgba(255, 255, 255, 0.22);
+		font-size: 12px; color: #fff;
+		i { font-size: 12px; color: #fff; }
+	}
+
+	/* ===== Tabs ===== */
+	.tabs {
+		display: flex;
+		background: var(--card);
+		border-radius: 12px;
+		padding: 4px;
+		margin-bottom: 14px;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	}
+	.tab {
+		flex: 1;
+		position: relative;
+		display: flex; flex-direction: column; align-items: center;
+		padding: 10px 0 8px;
+		border-radius: 9px;
+	}
+	.tab-label { font-size: 15px; font-weight: 500; color: var(--secondary); }
+	.tab.active { background: var(--theme-fill); }
+	.tab.active .tab-label { color: var(--theme-text); font-weight: 700; }
+	.tab-bar {
+		position: absolute; bottom: 3px;
+		width: 18px; height: 2.5px; border-radius: 2px;
+		background: var(--theme);
+	}
+
+	/* ===== 加载 ===== */
+	.loading-state {
+		display: flex; flex-direction: column; align-items: center; gap: 14px;
+		padding: 60px 0; color: var(--secondary); font-size: 14px;
+	}
+	.spinner {
+		width: 26px; height: 26px; border-radius: 50%;
+		border: 2.5px solid var(--theme-fill-strong);
+		border-top-color: var(--theme);
+		animation: spin 0.9s linear infinite;
+	}
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	/* ===== 时刻表 ===== */
+	.stops { background: var(--card); border-radius: 14px; padding: 6px 16px; }
+	.stop { display: flex; gap: 12px; }
+	.stop-rail { width: 14px; display: flex; flex-direction: column; align-items: center; padding-top: 16px; }
+	.stop-dot {
+		width: 9px; height: 9px; border-radius: 50%;
+		background: var(--theme-fill-strong);
+		border: 1.5px solid var(--theme);
+		flex-shrink: 0;
+	}
+	.stop-dot.terminal { width: 11px; height: 11px; background: var(--theme); }
+	.stop-line { width: 2px; flex: 1; background: var(--theme-border); margin: 4px 0; }
+	.stop-body { flex: 1; padding: 14px 0; border-bottom: 0.5px solid var(--separator); }
+	.stop:last-child .stop-body { border-bottom: none; }
+	.stop.current .stop-body { background: var(--theme-fill); border-radius: 8px; padding-left: 10px; padding-right: 10px; }
+
+	.stop-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+	.stop-name { font-size: 17px; font-weight: 600; color: var(--label); }
+	.stop-badge {
+		font-size: 10px; font-weight: 600; color: #fff;
+		background: var(--theme); border-radius: 5px; padding: 1px 6px;
+	}
+	/* 每站右侧的停靠站台 */
+	.stop-platform {
+		margin-left: auto;
+		font-size: 12px; font-weight: 600;
+		color: var(--theme-text);
+		background: var(--theme-fill);
+		border-radius: 6px;
+		padding: 2px 8px;
+		white-space: nowrap;
+	}
+
+	.stop-times { display: flex; gap: 18px; margin-top: 6px; }
+	.stop-time { display: flex; align-items: baseline; gap: 5px; }
+	.stop-time-label { font-size: 11px; color: var(--secondary); }
+	.stop-time-value { font-size: 15px; font-weight: 600; color: var(--label); }
+	.stop-extra { margin-top: 6px; }
+	.stop-extra-text { font-size: 11px; color: var(--secondary); }
+
+	/* ===== 卡片 ===== */
+	.card {
+		background: var(--card);
+		border-radius: 14px;
+		padding: 16px;
+		margin-bottom: 14px;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	}
+	.card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+	.card-icon { font-size: 15px; color: var(--theme-text); }
+	.card-title { font-size: 15px; font-weight: 700; color: var(--label); flex: 1; }
+	.card-live { font-size: 11px; color: var(--secondary); }
+	.card-note { display: block; margin-top: 10px; font-size: 11px; color: var(--secondary); }
+
+	.kv {
+		display: flex; justify-content: space-between; align-items: center;
+		padding: 9px 0; border-bottom: 0.5px solid var(--separator);
+	}
+	.kv:last-of-type { border-bottom: none; }
+	.kv-label { font-size: 13px; color: var(--secondary); }
+	.kv-value { font-size: 15px; font-weight: 600; color: var(--label); }
+
+	.empty-inline { padding: 20px 0; text-align: center; font-size: 13px; color: var(--secondary); }
+
+	/* ===== 地图 ===== */
+	.map-image { width: 100%; border-radius: 10px; display: block; }
+	.legend { display: flex; gap: 16px; margin-top: 10px; }
+	.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--secondary); }
+	.legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+	.legend-station { background: var(--theme); }
+	.legend-train { background: var(--theme); box-shadow: 0 0 0 3px var(--theme-fill-strong); }
+	.station-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+	.station-chip {
+		font-size: 11px; color: var(--theme-text);
+		background: var(--theme-fill);
+		border-radius: 6px; padding: 3px 8px;
+	}
+
+	/* ===== 车组 ===== */
+	.emu-block {
+		display: flex; align-items: center; gap: 12px;
+		background: var(--theme-fill);
+		border-radius: 12px;
+		padding: 14px 16px;
+	}
+	.emu-main { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+	.emu-no { font-size: 19px; font-weight: 700; color: var(--theme-text); }
+	.emu-model { font-size: 12px; color: var(--theme-text); opacity: 0.8; }
+	.emu-arrow { font-size: 14px; color: var(--theme-text); }
+
+	.train-list { display: flex; flex-direction: column; }
+	.train-row {
+		display: flex; align-items: center; gap: 12px;
+		padding: 12px 0;
+		border-bottom: 0.5px solid var(--separator);
+	}
+	.train-row:last-child { border-bottom: none; }
+	.train-row.current { background: var(--theme-fill); border-radius: 8px; padding-left: 10px; padding-right: 10px; }
+	.train-row-no { font-size: 16px; font-weight: 600; color: var(--theme-text); flex: 1; }
+	.train-row-tag {
+		font-size: 10px; font-weight: 600; color: #fff;
+		background: var(--theme); border-radius: 5px; padding: 1px 6px;
+	}
+	.train-row-type { font-size: 12px; color: var(--secondary); }
+	.train-row-arrow { font-size: 12px; color: var(--secondary); }
+
+	/* ===== 空态 ===== */
+	.empty-state {
+		display: flex; flex-direction: column; align-items: center; gap: 12px;
+		padding: 48px 0; color: var(--secondary); font-size: 14px; text-align: center;
+	}
+	.empty-state.big { padding: 90px 24px; }
+	.empty-icon { font-size: 34px; color: var(--theme-text); opacity: 0.5; }
+</style>

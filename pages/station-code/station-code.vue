@@ -1,5 +1,5 @@
 <template>
-	<view class="page">
+	<view class="page" :style="themeStyle">
 		<!-- 搜索栏 -->
 		<view class="search-box">
 			<input class="search-input" v-model="keyword" placeholder="搜索车站名称或代码" @input="onSearch" />

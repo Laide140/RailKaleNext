@@ -1,5 +1,5 @@
 <template>
-    <view>
+    <view :style="themeStyle">
         <view>
             <text style="font-size: 25px;color: #333;">
                 404 Page Not Found
