@@ -96,8 +96,13 @@
 			</view>
 		</view>
 
-		<!-- ===== Tab 2：运行 ===== -->
+		<!-- ===== Tab 2：运行（实时位置 与 路径地图 分块展示）===== -->
 		<view class="tab-panel" v-if="!loading && activeTab === 'run'">
+			<view class="panel-title">
+				<view class="panel-bar"></view>
+				<text class="panel-text">列车实时位置</text>
+				<text class="panel-hint" v-if="polling">自动刷新</text>
+			</view>
 			<view class="card">
 				<view class="card-head">
 					<i class="fas fa-location-dot card-icon"></i>
@@ -132,11 +137,15 @@
 				</view>
 			</view>
 
+			<view class="panel-title spaced">
+				<view class="panel-bar"></view>
+				<text class="panel-text">路径地图</text>
+				<text class="panel-hint" v-if="lineData">共 {{ stationNames.length }} 站</text>
+			</view>
 			<view class="card">
 				<view class="card-head">
 					<i class="fas fa-route card-icon"></i>
-					<text class="card-title">路径地图</text>
-					<text class="card-live" v-if="lineData">共 {{ stationNames.length }} 站</text>
+					<text class="card-title">运行线路</text>
 				</view>
 				<view class="empty-inline" v-if="!lineData">
 					<text>未获取到线路数据</text>
@@ -145,10 +154,29 @@
 					<image class="map-image" :src="staticMapUrl" mode="widthFix" v-if="staticMapUrl"></image>
 					<view class="legend">
 						<view class="legend-item"><view class="legend-dot legend-station"></view><text>途经车站</text></view>
-						<view class="legend-item" v-if="position"><view class="legend-dot legend-train"></view><text>列车当前位置</text></view>
+						<view class="legend-item"><view class="legend-line"></view><text>运行路径</text></view>
 					</view>
 					<view class="station-chips">
 						<text class="station-chip" v-for="(s, i) in stationNames" :key="i">{{ s }}</text>
+					</view>
+				</template>
+			</view>
+
+			<!-- 实时位置地图：独立一张图，放在路径地图下方 -->
+			<view class="panel-title spaced">
+				<view class="panel-bar"></view>
+				<text class="panel-text">实时位置地图</text>
+				<text class="panel-hint" v-if="polling">自动刷新</text>
+			</view>
+			<view class="card">
+				<view class="empty-inline" v-if="!position">
+					<text>列车尚未发车或已到达终点，暂无实时位置</text>
+				</view>
+				<template v-else>
+					<image class="map-image locate-map" :src="locateMapUrl" mode="widthFix" v-if="locateMapUrl"></image>
+					<view class="legend">
+						<view class="legend-item"><view class="legend-dot legend-train"></view><text>列车当前位置</text></view>
+						<text class="legend-coord" v-if="positionText">{{ positionText }}</text>
 					</view>
 				</template>
 			</view>
@@ -282,20 +310,29 @@
 				}
 				return out
 			},
-			// 高德静态图：路径 + 车站标记 + 列车位置。
-			// 同组 markers 必须写在一条里且 label 不能省略（省略会报 20003）
+			// 高德静态图：同组 markers 必须写在一条里且 label 不能省略（省略会报 20003）
+			// 路径地图：仅绘制运行路径与途经车站，不含列车位置
+			// （位置点与车站点同色同大时会被线路和小圆点淹没，故单独出图）
 			staticMapUrl() {
 				if (!this.lineData) return ''
 				const pts = this.routePoints
 				if (pts.length < 2) return ''
-				const coords = []
-				if (this.position) coords.push(`${this.position.lng},${this.position.lat}`)
-				coords.push(...stationCoordStrs(this.lineData).split(';').filter(Boolean))
-				const parts = [
-					`markers=${encodeURIComponent('mid,0x007AFF,0:' + coords.join(';'))}`,
-					`paths=${encodeURIComponent('7,0x007AFF,1,,:' + pts.join(';'))}`
-				]
+				const stations = stationCoordStrs(this.lineData)
+				const parts = []
+				if (stations) parts.push(`markers=${encodeURIComponent('mid,0x007AFF,0:' + stations)}`)
+				parts.push(`paths=${encodeURIComponent('7,0x007AFF,1,,:' + pts.join(';'))}`)
 				return getAmapStaticMap('750*500', null, null) + '&' + parts.join('&')
+			},
+			// 实时位置地图：独立一张图，放在路径地图下方。
+			// 高德的静态标记尺寸是固定的（large 约 21x32px），
+			// 画布越小标记占比越大 —— 故用 400*240 小画布 + 近距缩放，
+			// 让列车位置在小卡片里也清晰可见。
+			locateMapUrl() {
+				const p = this.position
+				if (!p) return ''
+				const marker = `large,0x007AFF,A:${p.lng},${p.lat}`
+				return getAmapStaticMap('400*240', marker, null) +
+					`&location=${p.lng},${p.lat}&zoom=16`
 			}
 		},
 		onLoad(options) {
@@ -548,6 +585,34 @@
 	.stop-extra { margin-top: 6px; }
 	.stop-extra-text { font-size: 11px; color: var(--secondary); }
 
+	/* ===== 运行页分节标题：把「实时位置」与「路径地图」视觉分开 ===== */
+	.panel-title {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 0 4px;
+		margin-bottom: 10px;
+	}
+	/* 与上一块拉开明显距离 */
+	.panel-title.spaced { margin-top: 28px; }
+	.panel-bar {
+		width: 3px;
+		height: 14px;
+		border-radius: 2px;
+		background: var(--theme);
+		flex-shrink: 0;
+	}
+	.panel-text {
+		font-size: 15px;
+		font-weight: 700;
+		color: var(--label);
+	}
+	.panel-hint {
+		margin-left: auto;
+		font-size: 11px;
+		color: var(--secondary);
+	}
+
 	/* ===== 卡片 ===== */
 	.card {
 		background: var(--card);
@@ -579,6 +644,10 @@
 	.legend-dot { width: 9px; height: 9px; border-radius: 50%; }
 	.legend-station { background: var(--theme); }
 	.legend-train { background: var(--theme); box-shadow: 0 0 0 3px var(--theme-fill-strong); }
+	.legend-line { width: 16px; height: 3px; border-radius: 2px; background: var(--theme); }
+	.legend-coord { margin-left: auto; font-size: 11px; color: var(--secondary); }
+	/* 实时位置地图：单独一张，宽度略窄以突出定位 */
+	.locate-map { border: 1px solid var(--theme-border); }
 	.station-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 	.station-chip {
 		font-size: 11px; color: var(--theme-text);
