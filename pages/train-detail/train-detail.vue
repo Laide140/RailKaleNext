@@ -11,8 +11,8 @@
 				confirm-type="search"
 				@confirm="doSearch"
 			/>
-			<text class="search-cancel" v-if="searchText" @click="searchText = ''">✕</text>
-			<view class="search-btn" @click="doSearch">查询</view>
+			<text class="search-cancel" v-if="searchText" @tap="searchText = ''">✕</text>
+			<view class="search-btn" @tap="doSearch">查询</view>
 		</view>
 
 		<!-- 车次标题 -->
@@ -43,7 +43,7 @@
 				v-for="t in tabs"
 				:key="t.key"
 				:class="{ active: activeTab === t.key }"
-				@click="activeTab = t.key"
+				@tap="activeTab = t.key"
 			>
 				<text class="tab-label">{{ t.label }}</text>
 				<view class="tab-bar" v-if="activeTab === t.key"></view>
@@ -184,6 +184,12 @@
 
 		<!-- ===== Tab 3：列车 ===== -->
 		<view class="tab-panel" v-if="!loading && activeTab === 'train'">
+			<!-- 完全无车组信息时给出明确空态，避免整页空白 -->
+			<view class="empty-state" v-if="!trainSet && !trainSetTrains.length">
+				<i class="fas fa-subway empty-icon"></i>
+				<text>未查询到该车次的担当车组资料</text>
+				<text class="empty-sub">该车次可能尚未编组或无公开担当数据</text>
+			</view>
 			<view class="card">
 				<view class="card-head">
 					<i class="fas fa-subway card-icon"></i>
@@ -192,7 +198,7 @@
 				<view class="empty-inline" v-if="!trainSet">
 					<text>未查到该车次的担当车组</text>
 				</view>
-				<view v-else class="emu-block" @click="goEmuDetail(trainSet)">
+				<view v-else class="emu-block" @tap="goEmuDetail(trainSet)">
 					<view class="emu-main">
 						<text class="emu-no">{{ trainSet }}</text>
 						<text class="emu-model">{{ emuModel }}</text>
@@ -282,7 +288,7 @@
 						v-for="(r, i) in trainSetTrains"
 						:key="i"
 						:class="{ current: r.train === trainNo }"
-						@click="goTrainDetail(r.train)"
+						@tap="goTrainDetail(r.train)"
 					>
 						<text class="train-row-no">{{ r.train }}</text>
 						<text class="train-row-tag" v-if="r.train === trainNo">当前</text>
@@ -844,5 +850,6 @@
 		padding: 48px 0; color: var(--secondary); font-size: 14px; text-align: center;
 	}
 	.empty-state.big { padding: 90px 24px; }
+	.empty-sub { font-size: 12px; color: var(--secondary); opacity: 0.8; }
 	.empty-icon { font-size: 34px; color: var(--theme-text); opacity: 0.5; }
 </style>
