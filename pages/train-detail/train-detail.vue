@@ -417,11 +417,6 @@
 				return this.visibleDiagrams.map(d => d.url)
 			},
 
-			// 车组资料图片地址（carInfo 的 pictureUrl 是 MD5 文件名）
-			cateringImage(pictureUrl) {
-				return cateringImageUrl(pictureUrl)
-			},
-
 			// 高德静态图：同组 markers 必须写在一条里且 label 不能省略（省略会报 20003）
 			// 路径地图：仅绘制运行路径与途经车站，不含列车位置
 			// （位置点与车站点同色同大时会被线路和小圆点淹没，故单独出图）
@@ -458,6 +453,14 @@
 		onUnload() { this.stopPolling() },
 		onHide() { this.stopPolling() },
 		methods: {
+			// 车组资料图片地址（carInfo 的 pictureUrl 是 MD5 文件名）
+			// 注意：模板中是以方法形式调用 cateringImage(...)，
+			// 必须定义在 methods 而不是 computed，否则渲染时抛
+			// "cateringImage is not a function" 并中断整个组件更新
+			cateringImage(pictureUrl) {
+				return cateringImageUrl(pictureUrl)
+			},
+
 			platformOf(stop) {
 				const p = this.platformMap[stop.station_name]
 				return (p && p.platform) || ''
