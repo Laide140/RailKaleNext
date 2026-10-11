@@ -50,19 +50,21 @@
 			</view>
 		</view>
 
-		<view class="loading-state" v-if="loading">
-			<view class="spinner"></view>
-			<text>正在查询 {{ trainNo }} 次列车...</text>
-		</view>
-
 		<!-- ===== Tab 1：时刻 ===== -->
-		<view class="tab-panel" v-if="!loading && activeTab === 'time'">
-			<view class="empty-state" v-if="!stops.length">
+		<view class="tab-panel" v-if="activeTab === 'time'">
+			<view class="loading-state" v-if="loading">
+				<view class="spinner"></view>
+				<text>正在查询 {{ trainNo }} 次列车...</text>
+			</view>
+			<!-- 无数据空态：仅在加载完成后显示 -->
+			<view class="empty-state" v-if="!loading && !stops.length">
 				<i class="fas fa-calendar-alt empty-icon"></i>
 				<text>未获取到时刻表数据</text>
 			</view>
-			<view class="platform-hint" v-if="platformLoading">正在查询各站停台…</view>
-			<view class="stops" v-else>
+			<!-- 有数据：停台提示与站点列表并列，不参与 v-if/v-else 配对 -->
+			<template v-if="stops.length">
+				<view class="platform-hint" v-if="platformLoading">正在查询各站停台…</view>
+				<view class="stops">
 				<view class="stop" v-for="(stop, index) in stops" :key="index" :class="{ current: isCurrentStop(stop) }">
 					<view class="stop-rail">
 						<view class="stop-dot" :class="{ terminal: index === 0 || index === stops.length - 1 }"></view>
@@ -95,10 +97,15 @@
 					</view>
 				</view>
 			</view>
+			</template>
 		</view>
 
 		<!-- ===== Tab 2：运行（实时位置 与 路径地图 分块展示）===== -->
-		<view class="tab-panel" v-if="!loading && activeTab === 'run'">
+		<view class="tab-panel" v-if="activeTab === 'run'">
+			<view class="loading-state" v-if="loading && !locate && !lineData">
+				<view class="spinner"></view>
+				<text>正在获取运行数据…</text>
+			</view>
 			<view class="panel-title">
 				<view class="panel-bar"></view>
 				<text class="panel-text">列车实时位置</text>
@@ -184,14 +191,18 @@
 		</view>
 
 		<!-- ===== Tab 3：列车 ===== -->
-		<view class="tab-panel" v-if="!loading && activeTab === 'train'">
+		<view class="tab-panel" v-if="activeTab === 'train'">
+			<view class="loading-state" v-if="loading && !trainSet">
+				<view class="spinner"></view>
+				<text>正在获取车组信息…</text>
+			</view>
 			<!-- 完全无车组信息时给出明确空态，避免整页空白 -->
-			<view class="empty-state" v-if="!trainSet && !trainSetTrains.length">
+			<view class="empty-state" v-else-if="!trainSet && !trainSetTrains.length">
 				<i class="fas fa-subway empty-icon"></i>
 				<text>未查询到该车次的担当车组资料</text>
 				<text class="empty-sub">该车次可能尚未编组或无公开担当数据</text>
 			</view>
-			<view class="card">
+			<view class="card" v-if="trainSet || !loading">
 				<view class="card-head">
 					<i class="fas fa-subway card-icon"></i>
 					<text class="card-title">担当车组</text>
