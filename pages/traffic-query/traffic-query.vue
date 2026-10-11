@@ -98,7 +98,8 @@
 <style lang="scss">
 	.page { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; min-height: 100vh; background: #f2f2f7; padding: 20rpx; }
 	.search-box { background: rgba(255,255,255,0.8); backdrop-filter: blur(20px); border-radius: 14px; padding: 24rpx; display: flex; align-items: center; gap: 16rpx; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.06); margin-bottom: 20rpx; }
-	.search-input { flex: 1; padding: 14rpx 20rpx; background: #f5f7fa; border-radius: 12rpx; font-size: 28rpx; }
+	/* uni-app 的 input 需显式高度，否则会被压扁 */
+	.search-input { flex: 1; padding: 0 20rpx; background: #f5f7fa; border-radius: 12rpx; font-size: 28rpx; height: 84rpx; line-height: 84rpx; box-sizing: border-box; color: var(--label); }
 	.search-btn { background: #007aff; color: #fff; font-size: 26rpx; padding: 0 28rpx; height: 60rpx; line-height: 60rpx; border-radius: 50rpx; flex-shrink: 0; }
 	.loading-state, .error-state { text-align: center; padding: 80rpx 0; color: #999; font-size: 28rpx; }
 	.error-state { color: #e74c3c; }

@@ -190,10 +190,14 @@
 	.form-input {
 		font-size: 28rpx;
 		color: #333;
-		padding: 14rpx 16rpx;
+		padding: 0 16rpx;
 		background: #f5f7fa;
 		border-radius: 10rpx;
 		width: 100%;
+		/* uni-app 的 input 需显式高度 */
+		height: 80rpx;
+		line-height: 80rpx;
+		box-sizing: border-box;
 	}
 
 	.generate-btn {

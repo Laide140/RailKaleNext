@@ -122,9 +122,13 @@
 		flex: 1;
 		font-size: 28rpx;
 		color: #fff;
-		padding: 14rpx 20rpx;
+		padding: 0 20rpx;
 		background: rgba(255, 255, 255, 0.1);
 		border-radius: 12rpx;
+		/* uni-app 的 input 需显式高度 */
+		height: 84rpx;
+		line-height: 84rpx;
+		box-sizing: border-box;
 	}
 
 	.search-btn {

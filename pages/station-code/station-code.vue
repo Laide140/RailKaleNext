@@ -114,10 +114,14 @@
 	.search-input {
 		background: #fff;
 		border-radius: 50rpx;
-		padding: 20rpx 40rpx 20rpx 60rpx;
+		padding: 0 40rpx 0 60rpx;
 		font-size: 28rpx;
 		color: #333;
 		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+		/* uni-app 的 input 需显式高度 */
+		height: 88rpx;
+		line-height: 88rpx;
+		box-sizing: border-box;
 	}
 
 	.search-icon {

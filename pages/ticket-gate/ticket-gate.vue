@@ -163,9 +163,13 @@ import { resolveTelecode } from '@/common/station.js'
 	.form-input {
 		font-size: 30rpx;
 		color: #333;
-		padding: 16rpx 20rpx;
+		padding: 0 20rpx;
 		background: #f5f7fa;
 		border-radius: 12rpx;
+		/* uni-app 的 input 需显式高度 */
+		height: 88rpx;
+		line-height: 88rpx;
+		box-sizing: border-box;
 	}
 
 	.date-input {

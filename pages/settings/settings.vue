@@ -416,8 +416,12 @@
 		color: var(--label);
 		background: var(--card);
 		border-radius: 8px;
-		padding: 8px 12px;
+		padding: 0 12px;
 		border: 1px solid var(--separator);
+		/* uni-app 的 input 需显式高度 */
+		height: 44px;
+		line-height: 44px;
+		box-sizing: border-box;
 	}
 	.picker-confirm {
 		flex-shrink: 0;

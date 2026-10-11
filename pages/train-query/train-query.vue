@@ -239,13 +239,13 @@
 .form-row:last-child { margin-bottom: 0; }
 .form-item { flex: 1; }
 .form-label { font-size: 13px; font-weight: 600; color: #8e8e93; margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.5px; }
-.form-input { width: 100%; font-size: 17px; color: #1c1c1e; padding: 15px 14px; background: #f5f7fa; border-radius: 10px; border: none; outline: none; box-sizing: border-box; height: 52px; }
+.form-input { width: 100%; font-size: 17px; color: var(--label); padding: 0 14px; background: #f5f7fa; border-radius: 10px; border: none; outline: none; box-sizing: border-box; height: 52px; line-height: 52px; }
 
-.swap-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; background: #f2f2f7; display: flex; align-items: center; justify-content: center; margin-top: 18px; font-size: 18px; color: #007aff; }
+.swap-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; background: #f2f2f7; display: flex; align-items: center; justify-content: center; margin-top: 18px; font-size: 18px; color: var(--theme-text); }
 .swap-btn:active { background: #e5e5ea; }
 .date-row { align-items: flex-end; }
 .date-item { flex: 1; }
-.date-picker { font-size: 17px; color: #1c1c1e; padding: 15px 14px; background: #f5f7fa; border-radius: 10px; height: 52px; display: flex; align-items: center; box-sizing: border-box; }
+.date-picker { font-size: 17px; color: var(--label); padding: 0 14px; background: #f5f7fa; border-radius: 10px; height: 52px; display: flex; align-items: center; box-sizing: border-box; }
 
 .search-btn { flex-shrink: 0; background: #007aff; color: #fff; font-size: 16px; font-weight: 600; padding: 0 28px; height: 44px; line-height: 44px; border-radius: 22px; border: none; margin: 0; }
 .search-btn:active { opacity: 0.8; }

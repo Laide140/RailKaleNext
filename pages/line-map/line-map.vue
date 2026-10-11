@@ -145,10 +145,15 @@
 
 	.search-input {
 		flex: 1;
-		padding: 14rpx 20rpx;
+		padding: 0 20rpx;
 		background: #f5f7fa;
 		border-radius: 12rpx;
 		font-size: 28rpx;
+		color: var(--label);
+		/* uni-app 的 input 需显式高度，否则会被压扁 */
+		height: 84rpx;
+		line-height: 84rpx;
+		box-sizing: border-box;
 	}
 
 	.search-btn {

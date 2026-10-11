@@ -230,10 +230,13 @@
 		color: #1c1c1e;
 		background: #f5f7fa;
 		border-radius: 10px;
-		padding: 10px 12px;
+		padding: 0 12px;
 		border: none;
 		outline: none;
 		box-sizing: border-box;
+		/* uni-app 的 input 不会仅靠 padding 撑开高度，必须显式指定 */
+		height: 44px;
+		line-height: 44px;
 	}
 	.search-btn {
 		flex-shrink: 0;

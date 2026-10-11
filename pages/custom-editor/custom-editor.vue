@@ -308,6 +308,9 @@
 		border: none;
 		outline: none;
 		text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+		/* uni-app 的 input 需显式高度 */
+		height: 44px;
+		line-height: 44px;
 	}
 	.cz-actions { display: flex; gap: 8px; }
 	.cz-action {
