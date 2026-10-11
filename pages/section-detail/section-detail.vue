@@ -1,8 +1,8 @@
 <template>
 	<view class="detail" :style="themeStyle">
-		<view class="hero" :style="heroStyle">
+		<view class="hero">
 			<view class="hero-overlay">
-				<view class="hero-icon" :style="{ backgroundColor: section.badgeColor }">
+				<view class="hero-icon">
 					<i class="fas" :class="section.icon"></i>
 				</view>
 				<text class="hero-title">{{ section.title }}</text>
@@ -12,7 +12,7 @@
 
 		<view class="grid">
 			<view class="grid-item" v-for="(item, i) in features" :key="i" @click="goToPage(item.path)">
-				<view class="grid-icon" :style="{ backgroundColor: item.color }">
+				<view class="grid-icon">
 					<i class="fas grid-icon-text" :class="item.icon"></i>
 				</view>
 				<text class="grid-label">{{ item.label }}</text>
@@ -32,23 +32,12 @@
 	export default {
 		data() {
 			return {
-				section: { title: '', subtitle: '', icon: '', badgeColor: '', bgImage: '' },
+				section: { title: '', subtitle: '', icon: '' },
 				features: [],
 			}
 		},
 		computed: {
-			customCards() { return this.$store.state.settings.customCards },
-			heroStyle() {
-				if (this.section.bgImage) {
-					return {
-						backgroundImage: `url(${this.section.bgImage})`,
-						backgroundSize: 'cover',
-						backgroundPosition: 'center',
-						backgroundColor: this.section.badgeColor || '#1c1c1e'
-					}
-				}
-				return { backgroundColor: this.section.badgeColor || '#1c1c1e' }
-			}
+			customCards() { return this.$store.state.settings.customCards }
 		},
 		onLoad(options) {
 			const id = options.id || 'travel'
@@ -60,9 +49,7 @@
 					this.section = {
 						title: card.title || '我的卡片',
 						subtitle: '',
-						icon: 'fa-th-large',
-						badgeColor: card.color,
-						bgImage: card.bgImage || ''
+						icon: 'fa-th-large'
 					}
 					this.features = getFeaturesByIds(card.features)
 				}
@@ -72,9 +59,7 @@
 					this.section = {
 						title: sec.title,
 						subtitle: sec.subtitle,
-						icon: sec.icon,
-						badgeColor: sec.badgeColor,
-						bgImage: sec.bgImage
+						icon: sec.icon
 					}
 					this.features = getFeaturesByIds(sec.features)
 				}
@@ -103,24 +88,24 @@
 	}
 
 	/* ===== Hero Banner ===== */
+	/* 分区头图：主题色填充（不再使用图片背景） */
 	.hero {
 		position: relative;
-		height: 220px;
-		background-size: cover;
-		background-position: center;
+		background: var(--theme);
+		border-radius: 16px;
+		overflow: hidden;
+		min-height: 150px;
 		margin-bottom: 20px;
 	}
 
 	.hero-overlay {
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(to bottom, rgba(0,0,0,0.15), rgba(0,0,0,0.65));
 		display: flex;
 		flex-direction: column;
 		justify-content: flex-end;
-		padding: 0 20px 28px;
+		padding: 22px 20px 24px;
 	}
 
+	/* 头图图标：半透明白底 + 白色图标，落在主题色上 */
 	.hero-icon {
 		width: 44px;
 		height: 44px;
@@ -129,7 +114,7 @@
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 12px;
-		box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+		background: rgba(255, 255, 255, 0.22);
 		i { font-size: 22px; color: #fff; }
 	}
 
@@ -166,6 +151,8 @@
 		padding: 18px 0;
 	}
 
+	/* 功能图标：主题色实底 + 白色图标（原先靠内联 item.color 上色，
+	 * 该字段已随 features.js 移除，导致图标变透明不可见） */
 	.grid-icon {
 		width: 40px;
 		height: 40px;
@@ -174,6 +161,7 @@
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 8px;
+		background: var(--theme);
 		transition: transform 0.2s;
 	}
 

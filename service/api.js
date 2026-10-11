@@ -327,6 +327,94 @@ export async function getTrainsOfTrainSet(trainSet) {
 	return res.list
 }
 
+
+/**
+ * 列车（车组）资料 —— 自有数据源 /12306/train/
+ *
+ * 目录约定：
+ *   /12306/train/{车型}/carInfo.json   列车信息（编组/长度/定员/时速/餐车…）
+ *   /12306/train/{车型}/carPic.png     列车大图
+ *   /12306/train/{车组号}/{0-7}.png    车厢图（按标号取，缺图时跳过）
+ *
+ * 其中 carInfo.json 的 pictureUrl 为 MD5 文件名，实际图片地址是
+ *   https://wifi.12306.cn/resourcecenter/cateringimages/{md5}.png
+ */
+
+const RAILWAY_ASSET_BASE = 'https://next.laide.net.cn/12306/train'
+const CATERING_BASE = 'https://wifi.12306.cn/resourcecenter/cateringimages'
+
+/** 车型（去掉车组序号与短横线）：CR400BF-A-5061 → CR400BF-A */
+export function carModelOf(trainSet) {
+	const s = String(trainSet || '').trim()
+	const m = s.match(/^(.*?)-?\d+$/)
+	return m ? m[1] : s
+}
+
+/** 列车信息 JSON 地址 */
+export function carInfoUrl(trainSet) {
+	return `${RAILWAY_ASSET_BASE}/${encodeURIComponent(carModelOf(trainSet))}/carInfo.json`
+}
+
+/** 列车大图地址 */
+export function carPicUrl(trainSet) {
+	return `${RAILWAY_ASSET_BASE}/${encodeURIComponent(carModelOf(trainSet))}/carPic.png`
+}
+
+/** 车厢图地址：index 0~7 */
+export function carDiagramUrl(trainSet, index) {
+	return `${RAILWAY_ASSET_BASE}/${encodeURIComponent(String(trainSet).trim())}/${index}.png`
+}
+
+/** 车厢图可选标号 */
+export const CAR_DIAGRAM_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7]
+
+/** carInfo 的 pictureUrl（MD5 文件名）→ 12306 实际图片地址 */
+export function cateringImageUrl(pictureUrl) {
+	const md5 = String(pictureUrl || '').trim()
+	if (!md5) return ''
+	if (/^https?:\/\//.test(md5)) return md5
+	return `${CATERING_BASE}/${md5.replace(/\.png$/i, '')}.png`
+}
+
+/**
+ * 拉取车组资料：carInfo.json + 逐张探测存在的车厢图
+ * @param {string} trainSet 车组号，如 CR400BF-A-5061
+ * @returns {Promise<{info: Array, diagrams: string[], carPic: string}>}
+ */
+export async function getTrainSetInfo(trainSet) {
+	const set = String(trainSet || '').trim()
+	if (!set) return { info: [], diagrams: [], carPic: '' }
+
+	const [info, diagrams] = await Promise.all([
+		new Promise((resolve) => {
+			uni.request({
+				url: carInfoUrl(set),
+				timeout: 15000,
+				success: (r) => {
+					try {
+						const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+						resolve(Array.isArray(d) ? d.sort((a, b) => (a.picOrder || 0) - (b.picOrder || 0)) : [])
+					} catch (e) { resolve([]) }
+				},
+				fail: () => resolve([])
+			})
+		}),
+		// 车厢图按标号探测，只保留真实存在的
+		Promise.all(CAR_DIAGRAM_INDEXES.map(i => new Promise((resolve) => {
+			const url = carDiagramUrl(set, i)
+			uni.request({
+				url,
+				method: 'HEAD',
+				timeout: 10000,
+				success: (r) => resolve(r.statusCode === 200 ? url : null),
+				fail: () => resolve(null)
+			})
+		}))).then(list => list.filter(Boolean))
+	])
+
+	return { info, diagrams, carPic: carPicUrl(set) }
+}
+
 /**
  * 车次综合信息（时刻表 + 停台 + 线路 + 实时位置 + 担当车组）
  *
@@ -458,6 +546,13 @@ export default {
 	getTrainSetOfTrain,
 	getTrainsOfTrainSet,
 	getTrainDetail,
+	getTrainSetInfo,
+	carInfoUrl,
+	carPicUrl,
+	carDiagramUrl,
+	carModelOf,
+	cateringImageUrl,
+	CAR_DIAGRAM_INDEXES,
 	parseStationCode,
 	getTrainBroadcastUrl,
 	getBaiduTtsUrl

@@ -71,8 +71,18 @@
 			<!-- 车票预览 -->
 			<view class="ticket-preview" v-if="ticketSrc">
 				<view class="preview-title">纪念车票</view>
-				<image class="ticket-image" :src="ticketSrc" mode="widthFix"></image>
-				<view class="save-hint">长按或点击保存可分享给好友</view>
+				<image
+					class="ticket-image"
+					:src="ticketSrc"
+					mode="widthFix"
+					@longpress="saveTicket"
+					@longtap="saveTicket"
+					@tap="saveTicket"
+				></image>
+				<view class="save-hint" @tap="saveTicket">长按或点击保存可分享给好友</view>
+				<button class="save-btn" @tap="saveTicket" :loading="saving">
+					<i class="fas fa-download icon-inline"></i> 保存到相册
+				</button>
 			</view>
 		</view>
 	</view>
@@ -80,14 +90,17 @@
 
 <script>
 	import { getTicket } from '@/service/api.js'
+	import { nextTicketSeq, formatTicketNo, peekTicketSeq } from '@/common/ticketNo.js'
 
 	export default {
 		data() {
 			return {
 				generating: false,
+				saving: false,
 				ticketSrc: '',
 				form: {
-					ticketNo: 'TICKET' + Date.now().toString(36).toUpperCase(),
+					// 票号默认 A000001，每生成一张自动 +1，超过 A999999 回到 A000001
+					ticketNo: formatTicketNo(nextTicketSeq()),
 					startStation: '',
 					endStation: '',
 					trainNo: '',
@@ -143,11 +156,108 @@
 					// Convert ArrayBuffer to base64
 					const base64 = uni.arrayBufferToBase64(result)
 					this.ticketSrc = 'data:image/png;base64,' + base64
+					// 生成成功后再把票号推进到下一张，避免失败也占用序号
+					this.form.ticketNo = formatTicketNo(nextTicketSeq())
 				} catch (err) {
 					uni.showToast({ title: '生成失败，请重试', icon: 'none' })
 				} finally {
 					this.generating = false
 				}
+			},
+
+			/**
+			 * 保存车票到相册（长按 / 点击图片均可触发）
+			 *
+			 * 图片是 data:base64 URL，各端处理方式不同：
+			 *  - App：写临时文件后调 uni.saveImageToPhotosAlbum
+			 *  - H5 ：download 属性触发浏览器下载
+			 *  - 小程序：需用户授权相册
+			 */
+			async saveTicket() {
+				if (!this.ticketSrc || this.saving) return
+				this.saving = true
+				try {
+					// #ifdef H5
+					const a = document.createElement('a')
+					a.href = this.ticketSrc
+					a.download = `RailKale-Ticket-${this.form.ticketNo}.png`
+					document.body.appendChild(a)
+					a.click()
+					document.body.removeChild(a)
+					uni.showToast({ title: '已开始下载', icon: 'none' })
+					// #endif
+
+					// #ifndef H5
+					const filePath = await this.writeTempFile()
+					await this.saveToAlbum(filePath)
+					uni.showToast({ title: '已保存到相册', icon: 'success' })
+					// #endif
+				} catch (err) {
+					const msg = (err && (err.errMsg || err.message)) || ''
+					if (msg.indexOf('auth deny') >= 0 || msg.indexOf('authorize') >= 0) {
+						this.promptAuth()
+					} else if (msg.indexOf('cancel') < 0) {
+						uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+					}
+				} finally {
+					this.saving = false
+				}
+			},
+
+			// base64 车票 → 本地临时文件路径（供 saveImageToPhotosAlbum 使用）
+			// App 端用 plus.io 写入 _doc，小程序端用 FileSystemManager
+			writeTempFile() {
+				return new Promise((resolve, reject) => {
+					const base64 = String(this.ticketSrc).split(',')[1] || ''
+					if (!base64) return reject(new Error('车票数据为空'))
+
+					// #ifdef APP-PLUS
+					plus.io.resolveLocalFileSystemURL('_doc/', (root) => {
+						root.getDirectory('RailKale', { create: true }, (dir) => {
+							const fname = `ticket_${Date.now()}.png`
+							dir.getFile(fname, { create: true }, (fileEntry) => {
+								fileEntry.createWriter((writer) => {
+									writer.onwrite = () => resolve(fileEntry.toLocalURL())
+									writer.onerror = reject
+									const binary = atob(base64)
+									const buf = new ArrayBuffer(binary.length)
+									const view = new Uint8Array(buf)
+									for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i)
+									writer.write(buf)
+								}, reject)
+							}, reject)
+						}, reject)
+					}, reject)
+					// #endif
+
+					// #ifdef MP
+					uni.getFileSystemManager().writeFile({
+						filePath: `${uni.env.USER_DATA_PATH}/ticket_${Date.now()}.png`,
+						data: base64,
+						encoding: 'base64',
+						success: (res) => resolve(res.filePath || `${uni.env.USER_DATA_PATH}/ticket.png`),
+						fail: reject
+					})
+					// #endif
+				})
+			},
+
+			saveToAlbum(filePath) {
+				return new Promise((resolve, reject) => {
+					uni.saveImageToPhotosAlbum({ filePath, success: resolve, fail: reject })
+				})
+			},
+
+			// 被拒绝授权时引导去设置页开启
+			promptAuth() {
+				uni.showModal({
+					title: '需要相册权限',
+					content: '保存车票需要访问相册，请在设置中开启权限',
+					confirmText: '去设置',
+					success: (res) => {
+						if (res.confirm) uni.openSetting({})
+					}
+				})
 			}
 		}
 	}
@@ -256,5 +366,16 @@
 		font-size: 22rpx;
 		color: #bbb;
 		margin-top: 12rpx;
+	}
+	.save-btn {
+		margin-top: 16rpx;
+		background: var(--theme);
+		color: #fff;
+		font-size: 28rpx;
+		font-weight: 600;
+		height: 80rpx;
+		line-height: 80rpx;
+		border-radius: 12rpx;
+		border: none;
 	}
 </style>

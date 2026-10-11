@@ -202,6 +202,71 @@
 				<text class="card-note" v-if="trainSet">点击车型可查询该车组的全部运用车次</text>
 			</view>
 
+			<!-- ===== 车组资料（自有数据源 /12306/train/）===== -->
+			<template v-if="trainSet">
+				<!-- 列车信息：编组 / 长度 / 定员 / 时速 / 餐车 等 -->
+				<view class="card">
+					<view class="card-head">
+						<i class="fas fa-circle-info card-icon"></i>
+						<text class="card-title">{{ emuModel }} 列车信息</text>
+						<text class="card-live" v-if="carInfoLoading">加载中…</text>
+					</view>
+					<view class="empty-inline" v-if="!carInfoLoading && !carInfo.length">
+						<text>暂无该车型的资料</text>
+					</view>
+					<view class="car-info-grid" v-else>
+						<view class="car-info-item" v-for="(it, i) in carInfo" :key="i">
+							<text class="car-info-name">{{ it.pictureName }}</text>
+							<text class="car-info-value">{{ it.pictureValue }}</text>
+							<image
+								class="car-info-icon"
+								:src="cateringImage(it.pictureUrl)"
+								mode="aspectFit"
+								v-if="cateringImage(it.pictureUrl)"
+							></image>
+						</view>
+					</view>
+				</view>
+
+				<!-- 列车大图 -->
+				<view class="card">
+					<view class="card-head">
+						<i class="fas fa-image card-icon"></i>
+						<text class="card-title">列车外观</text>
+					</view>
+					<image
+						class="car-pic"
+						:src="carPic"
+						mode="widthFix"
+						@tap="previewImage(carPic)"
+						@error="carPicFailed = true"
+						v-if="carPic && !carPicFailed"
+					></image>
+					<view class="empty-inline" v-else><text>暂无列车大图</text></view>
+				</view>
+
+				<!-- 车厢图：横向滚动，点按看大图 -->
+				<view class="card" v-if="carDiagrams.length">
+					<view class="card-head">
+						<i class="fas fa-train-subway card-icon"></i>
+						<text class="card-title">车厢图</text>
+						<text class="card-live">左右滑动 · 点按放大</text>
+					</view>
+					<scroll-view class="car-scroll" scroll-x show-scrollbar="false">
+						<view class="car-scroll-row">
+							<image
+								class="car-diagram"
+								v-for="(u, i) in carDiagrams"
+								:key="i"
+								:src="u"
+								mode="widthFix"
+								@tap="previewImage(u, carDiagrams)"
+							></image>
+						</view>
+					</scroll-view>
+				</view>
+			</template>
+
 			<view class="card" v-if="trainSet">
 				<view class="card-head">
 					<i class="fas fa-list card-icon"></i>
@@ -236,7 +301,10 @@
 </template>
 
 <script>
-	import { getTrainDetail, getTrainLocate, getAmapStaticMap } from '@/service/api.js'
+	import {
+		getTrainDetail, getTrainLocate, getAmapStaticMap,
+		getTrainSetInfo, carPicUrl, cateringImageUrl
+	} from '@/service/api.js'
 
 	export default {
 		data() {
@@ -253,6 +321,13 @@
 				locate: null,
 				trainSet: '',
 				trainSetTrains: [],
+
+				// 车组资料
+				carInfo: [],
+				carDiagrams: [],
+				carPic: '',
+				carInfoLoading: false,
+				carPicFailed: false,
 
 				polling: false,
 				_pollTimer: null
@@ -310,6 +385,11 @@
 				}
 				return out
 			},
+			// 车组资料图片地址（carInfo 的 pictureUrl 是 MD5 文件名）
+			cateringImage(pictureUrl) {
+				return cateringImageUrl(pictureUrl)
+			},
+
 			// 高德静态图：同组 markers 必须写在一条里且 label 不能省略（省略会报 20003）
 			// 路径地图：仅绘制运行路径与途经车站，不含列车位置
 			// （位置点与车站点同色同大时会被线路和小圆点淹没，故单独出图）
@@ -399,6 +479,8 @@
 						uni.showToast({ title: '未查询到该车次', icon: 'none' })
 					}
 					if (this.isRunning) this.startPolling()
+					// 车组资料异步加载，不阻塞主体
+					if (this.trainSet) this.loadCarInfo()
 				} catch (e) {
 					uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
 				} finally {
@@ -412,6 +494,33 @@
 				this.locate = null
 				this.trainSet = ''
 				this.trainSetTrains = []
+				this.carInfo = []
+				this.carDiagrams = []
+				this.carPic = ''
+				this.carPicFailed = false
+			},
+
+			// 拉取车组资料（carInfo.json + 车厢图）
+			async loadCarInfo() {
+				if (!this.trainSet) return
+				this.carInfoLoading = true
+				try {
+					const res = await getTrainSetInfo(this.trainSet)
+					this.carInfo = res.info || []
+					this.carDiagrams = res.diagrams || []
+					this.carPic = res.carPic || carPicUrl(this.trainSet)
+				} catch (e) {
+					this.carInfo = []
+					this.carDiagrams = []
+				} finally {
+					this.carInfoLoading = false
+				}
+			},
+
+			// 点按图片放大预览
+			previewImage(current, urls) {
+				if (!current) return
+				uni.previewImage({ urls: urls && urls.length ? urls : [current], current })
 			},
 			startPolling() {
 				this.stopPolling()
@@ -682,6 +791,52 @@
 	}
 	.train-row-type { font-size: 12px; color: var(--secondary); }
 	.train-row-arrow { font-size: 12px; color: var(--secondary); }
+
+	/* ===== 车组资料 ===== */
+	.car-info-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	.car-info-item {
+		flex: 1 1 calc(50% - 5px);
+		min-width: calc(50% - 5px);
+		box-sizing: border-box;
+		background: var(--theme-fill);
+		border-radius: 10px;
+		padding: 10px 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		position: relative;
+	}
+	.car-info-name { font-size: 12px; color: var(--secondary); }
+	.car-info-value { font-size: 16px; font-weight: 700; color: var(--theme-text); }
+	.car-info-icon {
+		position: absolute;
+		right: 10px;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 26px;
+		height: 26px;
+		opacity: 0.9;
+	}
+
+	.car-pic {
+		width: 100%;
+		border-radius: 10px;
+		display: block;
+		background: var(--card2);
+	}
+
+	.car-scroll { width: 100%; white-space: nowrap; }
+	.car-scroll-row { display: inline-flex; gap: 10px; padding-bottom: 4px; }
+	.car-diagram {
+		width: 280px;
+		flex-shrink: 0;
+		border-radius: 8px;
+		background: var(--card2);
+	}
 
 	/* ===== 空态 ===== */
 	.empty-state {

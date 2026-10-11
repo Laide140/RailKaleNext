@@ -319,6 +319,11 @@
 				this.statusText = '正在获取定位权限…'
 				this.redrawPath()
 
+				// 平台差异：
+				//  - H5   ：用 navigator.geolocation.watchPosition 实时推送
+				//  - App/小程序：navigator.geolocation 在 WebView 里存在但回调永不触发，
+				//          必须走 uni.getLocation 轮询（否则会一直停在「正在实时定位…」）
+				// #ifdef H5
 				if (typeof navigator !== 'undefined' && navigator.geolocation) {
 					try {
 						this.watchId = navigator.geolocation.watchPosition(
@@ -328,18 +333,41 @@
 						)
 						this.statusText = '正在实时定位…'
 						return
-					} catch (e) { /* 兜底 */ }
+					} catch (e) { /* 落到下方轮询兜底 */ }
 				}
+				// #endif
+
+				// 非 H5，或 H5 下 watchPosition 不可用时的轮询方案
 				const timer = setInterval(() => {
 					if (!this.recording) { clearInterval(timer); return }
 					uni.getLocation({
 						type: 'gcj02',
 						success: res => this.handleFix(res),
-						fail: () => {}
+						fail: (err) => this.handleLocationFail(err)
 					})
 				}, 2000)
 				this._pollTimer = timer
 				this.statusText = '正在实时定位…'
+				// 立即取一次，避免等 2 秒才出数
+				uni.getLocation({
+					type: 'gcj02',
+					success: res => this.handleFix(res),
+					fail: (err) => this.handleLocationFail(err)
+				})
+			},
+
+			// uni.getLocation 失败处理：权限被拒时给出可操作提示
+			handleLocationFail(err) {
+				const msg = (err && (err.errMsg || err.message)) || ''
+				console.error('getLocation 失败', err)
+				if (msg.indexOf('deny') >= 0 || msg.indexOf('auth') >= 0 || msg.indexOf('permission') >= 0) {
+					this.error = true
+					this.recording = false
+					this.statusText = '定位权限被拒绝，请在系统设置中开启'
+					this.clearWatch()
+				} else if (!this.hasFix) {
+					this.statusText = '正在获取定位…（首次定位可能较慢）'
+				}
 			},
 
 			handleFix(coords) {
