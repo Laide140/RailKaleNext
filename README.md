@@ -42,8 +42,11 @@
 
 ### 出行服务
 
+> 首页顶部搜索框输入车次号（如 `G1`）可直接进入「车次详情」。
+
 | 功能 | 说明 |
 | --- | --- |
+| **车次详情** | 车次综合信息，分三个标签页：**时刻**（时刻表，每站右侧显示停靠站台）、**运行**（路径地图 + 列车当前位置标记 + 实时刷新）、**列车**（担当车组，点击车型可查该车组全部运用车次） |
 | **车次查询** | 输入出发/到达站中文名查询车次列表，下方展示各席别余票（仅显示有票的席别） |
 | **时刻表** | 查看车次全部停靠站与到发时刻 |
 | **实时位置** | 展示列车当前位置，2 秒自动刷新，附车组担当号 |
@@ -63,7 +66,7 @@
 
 | 功能 | 说明 |
 | --- | --- |
-| **运用担当** | 按车次查车组、按车组查担当记录 |
+| **运用担当** | 按车次查担当车组、按车组查该车组担当的全部车次（自有数据源 `getTrainData`） |
 | **路网地图** | 全国铁路线路图（红色铁路、蓝色地铁、虚线隧道），首次需下载约 169MB 缓存 |
 | **纪念车票** | 生成纪念车票图片并保存到相册 |
 | **列车广播** | 文本转语音，模拟车站/列车广播（支持讯飞、百度双音源，含预设广播语） |
@@ -118,15 +121,15 @@ App 支持三套数据源，在 **「我的 → 设置 → API 源」** 切换�
 
 | 源 | BaseURL | 说明 |
 | --- | --- | --- |
-| **新**（推荐，默认） | `https://next.laide.net.cn/api` | 速度最快，覆盖全部端点 |
-| **旧** | `https://rail.laide.asia/api` | 兼容旧接口，速度较慢 |
+| **新**（推荐，默认） | `https://next.laide.net.cn/api` | 自有数据源，速度最快，覆盖全部端点 |
+| **旧** | `https://rail.laide.asia/api` | 自有旧接口，兼容用，速度较慢 |
 | **RailGo**（友商） | `https://rg-api.zenglingkun.cn/api/v2` | 仅支持部分端点 |
 
 选择 RailGo 时会提示：
 
-> 部分功能不支持 RailGo API，将使用新 API 作为备选数据源
+> 部分功能不支持 RailGo API，将使用自有数据源作为备选
 
-RailGo 仅支持 `getStationBigScreen`（车站大屏）、`getExit`（检票口）、`mapLine`（线路图）；其余端点会自动回退到「新」源。回退逻辑集中在 `service/api.js`：
+RailGo 仅支持 `getStationBigScreen`（车站大屏）、`getExit`（检票口）、`mapLine`（线路图）；其余端点会自动回退到自有「新」源。回退逻辑集中在 `service/api.js`：
 
 ```js
 // service/api.js
@@ -249,6 +252,7 @@ export const SECTIONS = [
 ├── pages/                        # 页面
 │   ├── home/                     # 首页（三种布局模式）
 │   ├── train-query/              # 车次查询（含余票）
+│   ├── train-detail/             # 车次详情（时刻 / 运行 / 列车 三标签页）
 │   ├── timetable/                # 时刻表
 │   ├── train-locate/             # 实时位置
 │   ├── speed-test/               # 定位测速（高德地图 + canvas 轨迹）
@@ -303,6 +307,10 @@ export const SECTIONS = [
 | `getLeftTickets(from, to, date)` | `/getLeftTicket` | 余票查询 | ✗ |
 | `getTrainTimeTable(train, date)` | `/getTrainTimeTable/index.php` | 时刻表 | ✗ |
 | `getTrainLocate(train)` | `/getTrainLocate/index.php` | 列车实时位置 | ✗ |
+| `getTrainData(mode, value)` | `/getTrainData/?train=` | 车组担当（车次↔车组） | ✗ |
+| `getTrainSetOfTrain(train)` | `/getTrainData/?train=` | 查车次的担当车组 | ✗ |
+| `getTrainsOfTrainSet(set)` | `/getTrainData/?train=` | 查车组担当的全部车次 | ✗ |
+| `getTrainDetail(train, date)` | 聚合上列端点 | 车次综合信息（时刻/运行/列车） | ✗ |
 | `getStationArea(station)` | `/getStationArea/` | 站台规模 | ✗ |
 | `getStationBigScreen(telecode)` | `/getStationBigScreen` | 车站大屏 | ✓ |
 | `getExit(trainNum, telecode)` | `/getExit` | 检票口 / 站台 | ✓ |
@@ -315,11 +323,13 @@ export const SECTIONS = [
 | `getTrainBroadcastUrl(text)` | `/getXiaoYanTTS/` | 讯飞语音合成 | ✗ |
 | `queryTicketCheck(...)` | `www.12306.cn/...` | 12306 官方检票口 | — |
 
-其他外部数据源：
+其他外部服务（仅地图与语音，不含业务数据）：
 
-- `https://api.rail.re` — 动车组配属、交路查询（运用担当页）
 - `https://restapi.amap.com/v3/staticmap` — 高德静态地图
 - `https://fanyi.baidu.com/gettts` — 百度语音合成
+
+> 车组担当、动车组配属、交路等业务数据均来自自有数据源
+> `next.laide.net.cn`，不再依赖第三方接口。
 
 **新增一个 API 端点**的标准写法：
 
@@ -358,7 +368,7 @@ export function getSomething(param) {
 ## 数据来源
 
 - **API 源（可切换）**：见 [API 源切换](#1-api-源切换)
-- **动车组配属 / 交路**：<https://api.rail.re>
+- **车组担当 / 动车组配属 / 交路**：自有数据源 <https://next.laide.net.cn>
 - **地图服务**：高德地图
 - **检票口官方数据**：中国铁路 12306
 
