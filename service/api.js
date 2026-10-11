@@ -419,7 +419,7 @@ export async function getTrainSetInfo(trainSet) {
  * @param {string} train 车次号，如 G1
  * @param {string} [date] 日期 YYYY-MM-DD，默认今天
  */
-export async function getTrainDetail(train, date) {
+export async function getTrainDetail(train, date, onPartial) {
 	const trainNo = String(train || '').trim().toUpperCase()
 	const d = date ? new Date(date) : new Date()
 	const day = date || `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -435,26 +435,65 @@ export async function getTrainDetail(train, date) {
 		trainSetTrains: []
 	}
 
+	// 四个接口互相独立，各自返回后立刻通过 onPartial 回传，
+	// 让页面能分步渲染，而不是等最慢的一个（实测冷缓存下可达 10s+）
+	const emit = (patch) => {
+		if (!onPartial) return
+		try { onPartial(patch) } catch (e) {}
+	}
+
 	const [tt, line, loc, td] = await Promise.all([
-		getTrainTimeTable(trainNo, day).catch(() => null),
-		getMapLine(trainNo).catch(() => null),
-		getTrainLocate(trainNo).catch(() => null),
-		getTrainData('train', trainNo)
+		getTrainTimeTable(trainNo, day).catch(() => null).then(r => {
+			const v = (r && r.code === 0 && r.data) ? r.data : null
+			if (v) emit({ timetable: v })
+			return v
+		}),
+		getMapLine(trainNo).catch(() => null).then(r => {
+			const v = (r && r.success && r.data) ? r.data : null
+			if (v) emit({ line: v })
+			return v
+		}),
+		getTrainLocate(trainNo).catch(() => null).then(r => {
+			const v = (r && r.code === 0) ? (r.data || null) : null
+			if (v) emit({ locate: v })
+			return v
+		}),
+		getTrainData('train', trainNo).then(r => {
+			const v = (r.single && r.single.trainSet) || (r.list[0] && r.list[0].trainSet) || ''
+			if (v) emit({ trainSet: v })
+			return v
+		})
 	])
 
-	if (tt && tt.code === 0 && tt.data) result.timetable = tt.data
-	if (line && line.success && line.data) result.line = line.data
-	if (loc && loc.code === 0) result.locate = loc.data || null
-	result.trainSet = (td.single && td.single.trainSet) || (td.list[0] && td.list[0].trainSet) || ''
+	result.timetable = tt
+	result.line = line
+	result.locate = loc
+	result.trainSet = td
 
-	// 每个停靠站的站台（站名 → 电报码 → 检票口接口）
-	const stops = (result.timetable && result.timetable.stops) || []
-	if (stops.length) result.platformMap = await fetchPlatforms(trainNo, stops)
+	// 停台查询需要先下载整张车站表（约 167KB），耗时可观，
+	// 不在主流程里做，由页面单独调用 getPlatformMap() 异步补充。
 
-	// 该车组担当的全部车次
-	if (result.trainSet) result.trainSetTrains = await getTrainsOfTrainSet(result.trainSet)
+	// 该车组担当的全部车次（独立补充，不阻塞主体）
+	if (result.trainSet) {
+		result.trainSetTrains = await getTrainsOfTrainSet(result.trainSet)
+	}
 
 	return result
+}
+
+/**
+ * 停台查询（独立于主流程）
+ *
+ * 需要车站中文名 → 电报码，而电报码来自整张车站表（约 167KB）。
+ * 因此这里单独调用，让页面主体先渲染，停台后到后填。
+ *
+ * @param {string} trainNo
+ * @param {Array} stops 时刻表站点列表
+ * @returns {Promise<Object>} { 站名: { platform, entrance, exit } }
+ */
+export async function getPlatformMap(trainNo, stops) {
+	if (!trainNo || !stops || !stops.length) return {}
+	return fetchPlatforms(trainNo, stops)
 }
 
 /**
@@ -542,6 +581,7 @@ export default {
 	getTrainSetOfTrain,
 	getTrainsOfTrainSet,
 	getTrainDetail,
+	getPlatformMap,
 	getTrainSetInfo,
 	carInfoUrl,
 	carPicUrl,

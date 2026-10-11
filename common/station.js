@@ -5,10 +5,44 @@
 
 import { getStationCode, parseStationCode } from '@/service/api.js'
 
+const CACHE_KEY = 'station_table_v1'
+const CACHE_TTL = 7 * 24 * 3600 * 1000   // 车站表一周更新一次足够
+
 let cache = null
 let nameToTelecode = null
 let telecodeToName = null
 let loadingPromise = null   // 并发去重：避免同时多个请求重复拉取车站表
+
+/** 从本地存储读取车站表缓存 */
+function readCache() {
+	try {
+		const raw = uni.getStorageSync(CACHE_KEY)
+		if (!raw) return null
+		const obj = typeof raw === 'string' ? JSON.parse(raw) : raw
+		if (!obj || !Array.isArray(obj.list) || !obj.list.length) return null
+		if (obj.ts && Date.now() - obj.ts > CACHE_TTL) return null
+		return obj.list
+	} catch (e) {
+		return null
+	}
+}
+
+/** 写入本地缓存（失败无所谓，只是下次仍走网络） */
+function writeCache(list) {
+	try {
+		uni.setStorageSync(CACHE_KEY, JSON.stringify({ ts: Date.now(), list }))
+	} catch (e) {}
+}
+
+/** 由车站列表构建双向映射 */
+function buildMaps(list) {
+	nameToTelecode = {}
+	telecodeToName = {}
+	for (const s of list) {
+		if (s.name) nameToTelecode[s.name.trim()] = s.telecode
+		if (s.telecode) telecodeToName[s.telecode.trim().toUpperCase()] = s.name
+	}
+}
 
 /**
  * 加载并缓存车站数据
@@ -16,19 +50,25 @@ let loadingPromise = null   // 并发去重：避免同时多个请求重复拉�
  */
 async function loadStations() {
   if (cache) return cache
+
+  // 先用本地缓存，避免每次查停台都下载 167KB 车站表
+  const cached = readCache()
+  if (cached) {
+    cache = cached
+    buildMaps(cache)
+    return cache
+  }
+
   if (loadingPromise) return loadingPromise
   loadingPromise = (async () => {
     const raw = await getStationCode()
-    cache = parseStationCode(raw)
-
-    // 构建双向映射
-    nameToTelecode = {}
-    telecodeToName = {}
-    for (const s of cache) {
-      if (s.name) nameToTelecode[s.name.trim()] = s.telecode
-      if (s.telecode) telecodeToName[s.telecode.trim().toUpperCase()] = s.name
+    const list = parseStationCode(raw)
+    if (list.length) {
+      cache = list
+      buildMaps(cache)
+      writeCache(cache)
     }
-    return cache
+    return cache || []
   })()
   try {
     return await loadingPromise

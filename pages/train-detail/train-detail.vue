@@ -61,6 +61,7 @@
 				<i class="fas fa-calendar-alt empty-icon"></i>
 				<text>未获取到时刻表数据</text>
 			</view>
+			<view class="platform-hint" v-if="platformLoading">正在查询各站停台…</view>
 			<view class="stops" v-else>
 				<view class="stop" v-for="(stop, index) in stops" :key="index" :class="{ current: isCurrentStop(stop) }">
 					<view class="stop-rail">
@@ -309,7 +310,7 @@
 
 <script>
 	import {
-		getTrainDetail, getTrainLocate, getAmapStaticMap,
+		getTrainDetail, getTrainLocate, getAmapStaticMap, getPlatformMap,
 		getTrainSetInfo, carPicUrl, cateringImageUrl
 	} from '@/service/api.js'
 
@@ -324,6 +325,7 @@
 
 				timetable: null,
 				platformMap: {},
+				platformLoading: false,
 				lineData: null,
 				locate: null,
 				trainSet: '',
@@ -338,7 +340,8 @@
 				carDiagramBroken: {},
 
 				polling: false,
-				_pollTimer: null
+				_pollTimer: null,
+				_loadToken: 0
 			}
 		},
 		computed: {
@@ -485,29 +488,51 @@
 				this.reset()
 				this.$store.commit('addSearchHistory', { train: trainNo, time: Date.now() })
 				uni.setNavigationBarTitle({ title: `${trainNo} 次列车` })
+				const token = ++this._loadToken
+				// 分步渲染：哪个接口先回就先显示哪块，
+				// 首屏不再等最慢的接口（冷缓存下 getTrainLocate 可达 5s+）
+				const onPartial = (patch) => {
+					if (token !== this._loadToken) return   // 已切换到别的车次，丢弃
+					if (patch.timetable) {
+						this.timetable = patch.timetable
+						this.loading = false                   // 有时刻表即可渲染首屏
+					}
+					if (patch.line) this.lineData = patch.line
+					if (patch.locate) {
+						this.locate = patch.locate
+						if (this.isRunning) this.startPolling()
+					}
+					if (patch.trainSet) {
+						this.trainSet = patch.trainSet
+						this.loadCarInfo()
+					}
+				}
+
 				try {
-					const res = await getTrainDetail(trainNo, this.date)
-					this.timetable = res.timetable
+					const res = await getTrainDetail(trainNo, this.date, onPartial)
 					this.platformMap = res.platformMap || {}
-					this.lineData = res.line
-					this.locate = res.locate
-					this.trainSet = res.trainSet
+					this.timetable = res.timetable || this.timetable
+					this.lineData = res.line || this.lineData
+					this.locate = res.locate || this.locate
+					this.trainSet = res.trainSet || this.trainSet
 					this.trainSetTrains = res.trainSetTrains || []
 					if (!res.timetable && !res.line && !res.locate) {
 						uni.showToast({ title: '未查询到该车次', icon: 'none' })
 					}
 					if (this.isRunning) this.startPolling()
-					// 车组资料异步加载，不阻塞主体
-					if (this.trainSet) this.loadCarInfo()
 				} catch (e) {
 					uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
 				} finally {
 					this.loading = false
 				}
+				// 以下均为异步补充，不阻塞主体渲染
+				if (this.trainSet) this.loadCarInfo()
+				this.loadPlatforms()
 			},
 			reset() {
 				this.timetable = null
 				this.platformMap = {}
+				this.platformLoading = false
 				this.lineData = null
 				this.locate = null
 				this.trainSet = ''
@@ -517,6 +542,23 @@
 				this.carPic = ''
 				this.carPicFailed = false
 				this.carDiagramBroken = {}
+			},
+
+			// 停台查询：需要先下载整张车站表，耗时较长，单独异步补充
+			// （放在主流程里会让整页卡在 loading 直到超时）
+			async loadPlatforms() {
+				const stops = this.stops
+				if (!stops.length) return
+				this.platformLoading = true
+				try {
+					const map = await getPlatformMap(this.trainNo, stops)
+					// 仅当仍是同一车次时才回填，避免快速切换车次时串数据
+					if (map && Object.keys(map).length) this.platformMap = map
+				} catch (e) {
+					// 停台属于附加信息，失败不打扰用户
+				} finally {
+					this.platformLoading = false
+				}
 			},
 
 			// 拉取车组资料（carInfo.json + 车厢图）
@@ -684,6 +726,13 @@
 		animation: spin 0.9s linear infinite;
 	}
 	@keyframes spin { to { transform: rotate(360deg); } }
+
+	.platform-hint {
+		font-size: 12px;
+		color: var(--secondary);
+		text-align: center;
+		padding: 8px 0 12px;
+	}
 
 	/* ===== 时刻表 ===== */
 	.stops { background: var(--card); border-radius: 14px; padding: 6px 16px; }
