@@ -2,8 +2,8 @@
     "name" : "RailKale: Next",
     "appid" : "__UNI__EEC2081",
     "description" : "铁路万花筒 RailKale: Next - 全面的铁路信息查询App，支持车次查询、时刻表、实时位置、车站大屏、检票口查询、纪念车票生成等功能",
-    "versionName" : "1.0.0",
-    "versionCode" : 1000,
+    "versionName" : "1.0.2",
+    "versionCode" : 1020,
     "transformPx" : false,
     "app-plus" : {
         "usingComponents" : true,
