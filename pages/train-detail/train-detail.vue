@@ -36,22 +36,12 @@
 			</view>
 		</view>
 
-		<!-- 三个 Tab -->
-		<view class="tabs">
-			<view
-				class="tab"
-				v-for="t in tabs"
-				:key="t.key"
-				:class="{ active: activeTab === t.key }"
-				@tap="activeTab = t.key"
-			>
-				<text class="tab-label">{{ t.label }}</text>
-				<view class="tab-bar" v-if="activeTab === t.key"></view>
-			</view>
-		</view>
+		<!-- 三个 Tab：下划线滑动 + 内容横向推入推出 -->
+		<slide-tabs :items="tabs" v-model="activeTabIndex">
 
-		<!-- ===== Tab 1：时刻 ===== -->
-		<view class="tab-panel" v-if="activeTab === 'time'">
+			<!-- ===== Tab 1：时刻 ===== -->
+			<template #time>
+			<view class="tab-panel">
 			<view class="loading-state" v-if="loading">
 				<view class="spinner"></view>
 				<text>正在查询 {{ trainNo }} 次列车...</text>
@@ -99,9 +89,11 @@
 			</view>
 			</template>
 		</view>
+			</template>
 
-		<!-- ===== Tab 2：运行（实时位置 与 路径地图 分块展示）===== -->
-		<view class="tab-panel" v-if="activeTab === 'run'">
+			<!-- ===== Tab 2：运行（实时位置 与 路径地图 分块展示）===== -->
+			<template #run>
+			<view class="tab-panel">
 			<view class="loading-state" v-if="loading && !locate && !lineData">
 				<view class="spinner"></view>
 				<text>正在获取运行数据…</text>
@@ -189,9 +181,11 @@
 				</template>
 			</view>
 		</view>
+			</template>
 
-		<!-- ===== Tab 3：列车 ===== -->
-		<view class="tab-panel" v-if="activeTab === 'train'">
+			<!-- ===== Tab 3：列车 ===== -->
+			<template #train>
+			<view class="tab-panel">
 			<view class="loading-state" v-if="loading && !trainSet">
 				<view class="spinner"></view>
 				<text>正在获取车组信息…</text>
@@ -311,6 +305,8 @@
 				</view>
 			</view>
 		</view>
+			</template>
+		</slide-tabs>
 
 		<view class="empty-state big" v-if="!trainNo && !loading">
 			<i class="fas fa-train empty-icon"></i>
@@ -324,15 +320,18 @@
 		getTrainDetail, getTrainLocate, getAmapStaticMap, getPlatformMap,
 		getTrainSetInfo, carPicUrl, cateringImageUrl
 	} from '@/service/api.js'
+	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
 
 	export default {
+		// 页面内局部注册（uni-app H5 下比全局注册更可靠）
+		components: { SlideTabs },
 		data() {
 			return {
 				searchText: '',
 				trainNo: '',
 				date: '',
 				loading: false,
-				activeTab: 'time',
+				activeTabIndex: 0,
 
 				timetable: null,
 				platformMap: {},
@@ -356,6 +355,7 @@
 			}
 		},
 		computed: {
+			// 供 slide-tabs 使用：key 对应插槽名，label 为显示文字
 			tabs() {
 				return [
 					{ key: 'time', label: '时刻' },

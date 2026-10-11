@@ -9,13 +9,11 @@
 		<view class="error-state" v-if="error"><text>{{ error }}</text></view>
 
 		<view class="result" v-if="result">
-			<view class="tabs">
-				<view class="tab" v-for="(tab, idx) in tabList" :key="idx" :class="{ active: activeTab === idx }" @tap="activeTab = idx">
-					<text>{{ tab.tabName }}</text>
-				</view>
-			</view>
-			<view class="tab-content">
-				<view class="node-card" v-for="(node, ni) in filteredNodes" :key="ni">
+			<!-- 分类 tab：下划线滑动 + 内容横向推入推出 -->
+			<slide-tabs :items="tabItems" v-model="activeTab">
+			<template v-for="(t, ti) in tabItems" #[t.key]>
+			<view class="tab-content" :key="t.key">
+				<view class="node-card" v-for="(node, ni) in nodesOf(ti)" :key="ni">
 					<view class="node-header">
 						<text class="node-name">{{ node.nodeName }}</text>
 						<text class="node-desc">{{ node.des }}</text>
@@ -28,8 +26,10 @@
 					</view>
 					<view class="line-list empty" v-else><text class="line-name empty-text">暂无线路信息</text></view>
 				</view>
-				<view class="empty-tab" v-if="!filteredNodes.length"><text>该分类下暂无信息</text></view>
+				<view class="empty-tab" v-if="!nodesOf(ti).length"><text>该分类下暂无信息</text></view>
 			</view>
+			</template>
+			</slide-tabs>
 		</view>
 
 		<view class="empty-state" v-if="!loading && !result && !error">
@@ -41,11 +41,20 @@
 
 <script>
 	import { getStationCode, getStationInfo } from '@/service/api.js'
+	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
+
 	export default {
+		components: { SlideTabs },
 		data() {
 			return { station: '', loading: false, result: null, error: '', activeTab: 0 }
 		},
 		computed: {
+			// 给 slide-tabs 用：只有一项时用单插槽 #pane
+			tabItems() {
+				const list = this.tabList
+				if (list.length <= 1) return [{ key: 'pane', label: list.length ? list[0].tabName : '' }]
+				return list.map((t, i) => ({ key: 't' + i, label: t.tabName }))
+			},
 			tabList() {
 				if (!this.result || !this.result.tabList) return []
 				return this.result.tabList
@@ -61,6 +70,17 @@
 			}
 		},
 		methods: {
+			// 按 tab 索引过滤节点（每个滑动面板各自渲染自己的那一份）
+			nodesOf(idx) {
+				if (!this.result || !this.result.nodeList) return []
+				const tab = this.tabList[idx]
+				if (!tab) return []
+				return this.result.nodeList.filter(function(n) {
+					if (tab.tabType) return n.typeName === tab.tabName || n.nodeType === tab.tabType
+					return n.typeName === tab.tabName
+				})
+			},
+
 			async search() {
 				var s = this.station.trim()
 				if (!s) { uni.showToast({ title: '请输入车站名称', icon: 'none' }); return }

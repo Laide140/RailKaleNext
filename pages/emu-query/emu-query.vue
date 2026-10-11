@@ -1,10 +1,15 @@
 <template>
 	<view class="page" :style="themeStyle">
 		<view class="search-box">
-			<view class="toggle-bar">
-				<view class="toggle-btn" :class="{ active: mode === 'train' }" @tap="switchMode('train')">车次</view>
-				<view class="toggle-btn" :class="{ active: mode === 'emu' }" @tap="switchMode('emu')">车组号</view>
-			</view>
+			<!-- 分段控件：胶囊滑块平滑滑动 -->
+			<slide-tabs
+				class="mode-seg"
+				variant="seg"
+				bar-only
+				:items="modeItems"
+				:value="modeIndex"
+				@change="onModeChange"
+			/>
 			<input
 				class="search-input"
 				v-model="query"
@@ -18,9 +23,9 @@
 		<!-- 错误提示保持原红色，属于语义色 -->
 		<view class="error" v-if="error && !loading"><text>{{ error }}</text></view>
 
-		<!-- 车次 → 担当车组 -->
-		<view class="result" v-if="!loading && mode === 'train' && single">
-			<view class="result-title">车次 {{ single.train }} 的担当车组</view>
+		<!-- 车次 → 担当车组（基于已查询的快照，不受输入框实时编辑影响） -->
+		<view class="result" v-if="!loading && searched.mode === 'train' && single">
+			<view class="result-title">车次 {{ searched.query }} 的担当车组</view>
 			<view class="record" @tap="goTrainsOfSet(single.trainSet)">
 				<view class="record-body">
 					<text class="record-main">{{ single.trainSet }}</text>
@@ -30,8 +35,8 @@
 		</view>
 
 		<!-- 车组 → 担当车次 -->
-		<view class="result" v-if="!loading && mode === 'emu' && list.length">
-			<view class="result-title">车组 {{ query }} 担当 {{ list.length }} 趟车次</view>
+		<view class="result" v-if="!loading && searched.mode === 'emu' && list.length">
+			<view class="result-title">车组 {{ searched.query }} 担当 {{ list.length }} 趟车次</view>
 			<view class="record" v-for="(r, i) in list" :key="i" @tap="goTrainDetail(r.train)">
 				<view class="record-body">
 					<text class="record-main">{{ r.train }}</text>
@@ -42,21 +47,40 @@
 		</view>
 
 		<view class="empty" v-if="!loading && !hasResult">
-			<text>{{ query ? '未查询到记录' : '输入车次或车组号开始查询' }}</text>
+			<text>{{ searched.query ? '未查询到记录' : '输入车次或车组号开始查询' }}</text>
 		</view>
 	</view>
 </template>
 
 <script>
 	import { getTrainData } from '@/service/api.js'
+	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
 
 	export default {
+		components: { SlideTabs },
 		data() {
-			return { query: '', mode: 'train', loading: false, single: null, list: [], error: '' }
+			return {
+				query: '',      // 输入框内容（实时编辑）
+				mode: 'train',  // 当前选中的查询类型（实时）
+				// 已执行查询的快照：结果区只依据它渲染，
+				// 这样编辑输入框或切换类型时不会让已有结果跟着变
+				searched: { query: '', mode: '' },
+				loading: false,
+				single: null,
+				list: [],
+				error: ''
+			}
 		},
 		computed: {
+			modeItems() {
+				return [{ key: 'train', label: '车次' }, { key: 'emu', label: '车组号' }]
+			},
+			modeIndex() {
+				return this.mode === 'emu' ? 1 : 0
+			},
 			hasResult() {
-				return this.mode === 'train' ? !!this.single : this.list.length > 0
+				if (!this.searched.mode) return false
+				return this.searched.mode === 'train' ? !!this.single : this.list.length > 0
 			}
 		},
 		onLoad(options) {
@@ -69,12 +93,14 @@
 			}
 		},
 		methods: {
+			onModeChange(i) {
+				this.switchMode(i === 1 ? 'emu' : 'train')
+			},
 			switchMode(m) {
 				if (this.mode === m) return
 				this.mode = m
-				this.single = null
-				this.list = []
-				this.error = ''
+				// 注意：这里不清空结果。结果区由 searched 快照驱动，
+				// 切类型只影响下一次查询，已有结果保持不动。
 			},
 			async search() {
 				const q = String(this.query || '').trim()
@@ -82,14 +108,18 @@
 					uni.showToast({ title: '请输入查询内容', icon: 'none' })
 					return
 				}
+				// 记录本次查询的类型与关键词，结果区据此渲染
+				const mode = this.mode
 				this.loading = true
 				this.error = ''
 				this.single = null
 				this.list = []
 
-				const res = await getTrainData(this.mode, q)
+				const res = await getTrainData(mode, q)
 				this.loading = false
-				if (this.mode === 'train') this.single = res.single
+				// 查询期间用户可能改了类型/关键词，此时以当前值重新判定
+				this.searched = { query: q, mode }
+				if (mode === 'train') this.single = res.single
 				else this.list = res.list
 			},
 			goTrainsOfSet(trainSet) {

@@ -3,14 +3,15 @@
 		<!-- 音源选择 -->
 		<view class="section">
 			<text class="section-title">音源</text>
-			<view class="segmented-control">
-				<view class="seg-item" :class="{ active: source === 'xunfei' }" @click="source = 'xunfei'">
-					<text>讯飞</text>
-				</view>
-				<view class="seg-item" :class="{ active: source === 'baidu' }" @click="source = 'baidu'">
-					<text>百度</text>
-				</view>
-			</view>
+			<!-- 音源分段控件：胶囊滑块平滑滑动 -->
+			<slide-tabs
+				class="source-seg"
+				variant="seg"
+				bar-only
+				:items="sourceItems"
+				:value="sourceIndex"
+				@change="onSourceChange"
+			/>
 		</view>
 
 		<!-- 快捷广播语 -->
@@ -64,6 +65,7 @@
 
 <script>
 	import { getTrainBroadcastUrl, getBaiduTtsUrl } from '@/service/api.js'
+	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
 
 	const PRESETS = [
 		{ label: '广铁U彩', text: '广铁U彩提示您，前方到站是：广州南站，请下车的乘客提前做好下车准备。' },
@@ -72,6 +74,15 @@
 	]
 
 	export default {
+		components: { SlideTabs },
+		computed: {
+			sourceItems() {
+				return [{ key: 'xunfei', label: '讯飞' }, { key: 'baidu', label: '百度' }]
+			},
+			sourceIndex() {
+				return this.source === 'baidu' ? 1 : 0
+			}
+		},
 		data() {
 			return {
 				presets: PRESETS,
@@ -88,6 +99,10 @@
 			this.destroyAudio()
 		},
 		methods: {
+			onSourceChange(i) {
+				this.source = i === 1 ? 'baidu' : 'xunfei'
+			},
+
 			selectPreset(item) {
 				this.text = item.text
 				this.isError = false
