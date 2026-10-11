@@ -17,18 +17,7 @@
         {
             "path": "pages/timetable/timetable",
             "style": {
-                "navigationBarTitleText": "时刻表",
-                "app-plus": {
-                    "titleNView": {
-                        "buttons": [
-                            {
-                                "text": "切换",
-                                "fontSize": "14",
-                                "color": "#007aff"
-                            }
-                        ]
-                    }
-                }
+                "navigationBarTitleText": "时刻表"
             }
         },
         {

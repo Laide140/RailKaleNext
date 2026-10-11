@@ -1,14 +1,5 @@
 <template>
 	<view class="broadcast" :class="{ 'source-baidu': source === 'baidu' }" :style="themeStyle">
-		<!-- Header -->
-		<view class="header">
-			<view class="header-icon-wrap">
-				<i class="fas fa-bullhorn header-icon"></i>
-			</view>
-			<text class="header-title">列车广播</text>
-			<text class="header-subtitle">模拟车站及列车语音播报</text>
-		</view>
-
 		<!-- 音源选择 -->
 		<view class="section">
 			<text class="section-title">音源</text>
@@ -205,40 +196,6 @@
 		padding: 0 20px 40px;
 		background: #f2f2f7;
 		min-height: 100vh;
-	}
-
-	/* ===== Header ===== */
-	.header {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: 36px 0 24px;
-	}
-
-	.header-icon-wrap {
-		width: 52px;
-		height: 52px;
-		border-radius: 14px;
-		background: #007aff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 14px;
-	}
-
-	.header-icon { font-size: 24px; color: #fff; }
-
-	.source-baidu .header-icon-wrap { background: #2932e1; }
-
-	.header-title {
-		font-size: 22px;
-		font-weight: 700;
-		color: #1c1c1e;
-		margin-bottom: 3px;
-	}
-	.header-subtitle {
-		font-size: 14px;
-		color: #8e8e93;
 	}
 
 	/* ===== Section ===== */

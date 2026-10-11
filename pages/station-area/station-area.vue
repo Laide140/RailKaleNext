@@ -1,14 +1,5 @@
 <template>
 	<view class="page" :style="themeStyle">
-		<!-- Header -->
-		<view class="header">
-			<view class="header-icon-wrap">
-				<i class="fas fa-stairs header-icon"></i>
-			</view>
-			<text class="header-title">站台规模</text>
-			<text class="header-subtitle">查询车站的站台数与到发线路数</text>
-		</view>
-
 		<!-- 搜索 -->
 		<view class="search-card">
 			<input
@@ -179,35 +170,6 @@
 		padding: 0 16px 40px;
 		background: #f2f2f7;
 		min-height: 100vh;
-	}
-
-	/* ===== Header ===== */
-	.header {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: 28px 0 20px;
-	}
-	.header-icon-wrap {
-		width: 52px;
-		height: 52px;
-		border-radius: 14px;
-		background: #5856d6;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 14px;
-	}
-	.header-icon { font-size: 24px; color: #fff; }
-	.header-title {
-		font-size: 22px;
-		font-weight: 700;
-		color: #1c1c1e;
-		margin-bottom: 3px;
-	}
-	.header-subtitle {
-		font-size: 14px;
-		color: #8e8e93;
 	}
 
 	/* ===== Search ===== */

@@ -1,14 +1,5 @@
 <template>
 	<view class="page" :style="themeStyle">
-		<!-- Header -->
-		<view class="header">
-			<view class="header-icon-wrap">
-				<i class="fas fa-gauge-high header-icon"></i>
-			</view>
-			<text class="header-title">定位测速</text>
-			<text class="header-subtitle">基于高德地图的实时速度与移动轨迹</text>
-		</view>
-
 		<!-- 高德地图 + canvas 叠加层 -->
 		<view class="map-card">
 			<view class="map-wrap">
@@ -487,35 +478,6 @@
 		background: #f2f2f7;
 		min-height: 100vh;
 		position: relative;
-	}
-
-	/* ===== Header ===== */
-	.header {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: 28px 0 20px;
-	}
-	.header-icon-wrap {
-		width: 52px;
-		height: 52px;
-		border-radius: 14px;
-		background: #007aff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 14px;
-	}
-	.header-icon { font-size: 24px; color: #fff; }
-	.header-title {
-		font-size: 22px;
-		font-weight: 700;
-		color: #1c1c1e;
-		margin-bottom: 3px;
-	}
-	.header-subtitle {
-		font-size: 14px;
-		color: #8e8e93;
 	}
 
 	/* ===== Map Card ===== */

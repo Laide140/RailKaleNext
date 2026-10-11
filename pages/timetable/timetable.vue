@@ -1,5 +1,20 @@
 <template>
 	<view class="page" :style="themeStyle">
+		<!-- 顶部搜索框：输入车次查询时刻表 -->
+		<view class="search-section">
+			<i class="fas fa-search search-icon"></i>
+			<input
+				class="search-input"
+				v-model="train"
+				placeholder="输入车次，如 G1"
+				placeholder-class="search-placeholder"
+				confirm-type="search"
+				@confirm="fetchTimetable"
+			/>
+			<text class="search-cancel" v-if="train" @click="train = ''">✕</text>
+			<view class="search-btn" @click="fetchTimetable">查询</view>
+		</view>
+
 		<view class="train-info" v-if="trainInfo.train_number">
 			<view class="train-header">
 				<text class="train-no">{{ trainInfo.train_number }}</text>
@@ -72,9 +87,6 @@
 				this.fetchTimetable()
 			}
 		},
-		onNavigationBarButtonTap() {
-			this.promptTrain()
-		},
 		methods: {
 			async fetchTimetable() {
 				if (!this.train.trim()) {
@@ -98,20 +110,6 @@
 				} finally {
 					this.loading = false
 				}
-			},
-			promptTrain() {
-				uni.showModal({
-					title: '查询时刻表',
-					content: '请输入车次号（如 G1）',
-					editable: true,
-					placeholderText: this.train,
-					success: (res) => {
-						if (res.confirm && res.content) {
-							this.train = res.content.trim()
-							this.fetchTimetable()
-						}
-					}
-				})
 			}
 		}
 	}
@@ -124,8 +122,44 @@
 		padding: 20rpx;
 	}
 
+	/* ===== 搜索框 ===== */
+	.search-section {
+		display: flex; align-items: center; gap: 10px;
+		background: var(--card);
+		border-radius: 12px;
+		padding: 10px 10px 10px 16px;
+		margin-bottom: 20rpx;
+		border: 1px solid var(--theme-border);
+		box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.06);
+	}
+	.search-icon { font-size: 17px; color: var(--theme-text); }
+	.search-input {
+		flex: 1;
+		font-size: 17px;
+		color: var(--label);
+		background: transparent;
+		border: none;
+		outline: none;
+		/* uni-app 的 input 需显式高度 */
+		height: 44px;
+		line-height: 44px;
+	}
+	.search-placeholder { color: var(--secondary); }
+	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 6px; }
+	.search-btn {
+		flex-shrink: 0;
+		background: var(--theme);
+		color: #fff;
+		font-size: 15px;
+		font-weight: 600;
+		border-radius: 10px;
+		padding: 8px 16px;
+		line-height: 1.2;
+	}
+
 	.train-info {
-		background: linear-gradient(135deg, #007aff, #4A90D9);
+		/* 装饰性车次横幅：跟随主题色 */
+		background: var(--theme);
 		border-radius: 20rpx;
 		padding: 30rpx;
 		color: #fff;
