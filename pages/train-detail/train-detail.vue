@@ -245,14 +245,14 @@
 						:src="carPic"
 						mode="widthFix"
 						@tap="previewImage(carPic)"
-						@error="carPicFailed = true"
+						@error="onCarPicError"
 						v-if="carPic && !carPicFailed"
 					></image>
 					<view class="empty-inline" v-else><text>暂无列车大图</text></view>
 				</view>
 
 				<!-- 车厢图：横向滚动，点按看大图 -->
-				<view class="card" v-if="carDiagrams.length">
+				<view class="card" v-if="visibleDiagrams.length">
 					<view class="card-head">
 						<i class="fas fa-train-subway card-icon"></i>
 						<text class="card-title">车厢图</text>
@@ -262,11 +262,12 @@
 						<view class="car-scroll-row">
 							<image
 								class="car-diagram"
-								v-for="(u, i) in carDiagrams"
-								:key="i"
-								:src="u"
+								v-for="d in visibleDiagrams"
+								:key="d.i"
+								:src="d.url"
 								mode="widthFix"
-								@tap="previewImage(u, carDiagrams)"
+								@tap="previewImage(d.url, visibleDiagramUrls)"
+								@error="onDiagramError(d.i)"
 							></image>
 						</view>
 					</scroll-view>
@@ -334,6 +335,7 @@
 				carPic: '',
 				carInfoLoading: false,
 				carPicFailed: false,
+				carDiagramBroken: {},
 
 				polling: false,
 				_pollTimer: null
@@ -391,6 +393,16 @@
 				}
 				return out
 			},
+			// 过滤掉加载失败的车厢图
+			visibleDiagrams() {
+				return this.carDiagrams
+					.map((url, i) => ({ url, i }))
+					.filter(d => !this.carDiagramBroken[d.i])
+			},
+			visibleDiagramUrls() {
+				return this.visibleDiagrams.map(d => d.url)
+			},
+
 			// 车组资料图片地址（carInfo 的 pictureUrl 是 MD5 文件名）
 			cateringImage(pictureUrl) {
 				return cateringImageUrl(pictureUrl)
@@ -504,6 +516,7 @@
 				this.carDiagrams = []
 				this.carPic = ''
 				this.carPicFailed = false
+				this.carDiagramBroken = {}
 			},
 
 			// 拉取车组资料（carInfo.json + 车厢图）
@@ -521,6 +534,18 @@
 				} finally {
 					this.carInfoLoading = false
 				}
+			},
+
+			// 列车大图加载失败：延迟到下一个 tick 再改状态，
+			// 避免在渲染过程中改 data 与 v-if 形成反复重渲染
+			onCarPicError() {
+				if (this.carPicFailed) return
+				this.$nextTick(() => { this.carPicFailed = true })
+			},
+
+			// 车厢图缺图：隐藏该张（不改变数组长度，仅标记）
+			onDiagramError(i) {
+				this.carDiagramBroken = Object.assign({}, this.carDiagramBroken, { [i]: true })
 			},
 
 			// 点按图片放大预览

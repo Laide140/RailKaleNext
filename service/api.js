@@ -377,7 +377,12 @@ export function cateringImageUrl(pictureUrl) {
 }
 
 /**
- * 拉取车组资料：carInfo.json + 逐张探测存在的车厢图
+ * 拉取车组资料：carInfo.json + 车厢图地址
+ *
+ * 车厢图按约定直接生成 0~7 的地址，不做存在性探测
+ * （HEAD 请求在 App/小程序端支持不稳定，且会带来 8 个多余请求；
+ *   个别标号缺图时交由 <image> 的 error 事件处理）。
+ *
  * @param {string} trainSet 车组号，如 CR400BF-A-5061
  * @returns {Promise<{info: Array, diagrams: string[], carPic: string}>}
  */
@@ -399,17 +404,8 @@ export async function getTrainSetInfo(trainSet) {
 				fail: () => resolve([])
 			})
 		}),
-		// 车厢图按标号探测，只保留真实存在的
-		Promise.all(CAR_DIAGRAM_INDEXES.map(i => new Promise((resolve) => {
-			const url = carDiagramUrl(set, i)
-			uni.request({
-				url,
-				method: 'HEAD',
-				timeout: 10000,
-				success: (r) => resolve(r.statusCode === 200 ? url : null),
-				fail: () => resolve(null)
-			})
-		}))).then(list => list.filter(Boolean))
+		// 车厢图：按约定直接给 0~7 的地址，不做探测
+		Promise.resolve(CAR_DIAGRAM_INDEXES.map(i => carDiagramUrl(set, i)))
 	])
 
 	return { info, diagrams, carPic: carPicUrl(set) }
