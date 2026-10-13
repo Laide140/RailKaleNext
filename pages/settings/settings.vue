@@ -57,6 +57,16 @@
 					<text class="api-host">rg-api.zenglingkun.cn</text>
 				</view>
 			</view>
+			<!-- RailGo 品牌图：仅在选用 RailGo 数据源时显示 -->
+			<view class="railgo-brand" v-if="apiSource === 'railgo'">
+				<image
+					class="railgo-logo"
+					src="@/static/railgo/railgo-data-service.png"
+					mode="widthFix"
+				></image>
+				<text class="railgo-note">数据由 RailGo Data Service 提供</text>
+			</view>
+
 			<text class="api-hint">RailGo 仅支持车站大屏、检票口、线路图；其余功能自动使用自有数据源。</text>
 		</view>
 
@@ -325,6 +335,25 @@
 		margin: 0 0 14px;
 	}
 	.api-options { display: flex; gap: 8px; }
+
+	/* RailGo 品牌图（横版，选中该数据源时展示） */
+	.railgo-brand {
+		margin-top: 12px;
+		padding: 14px;
+		background: var(--card2);
+		border-radius: 12px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+	}
+	.railgo-logo {
+		width: 100%;
+		max-width: 260px;
+		border-radius: 8px;
+		display: block;
+	}
+	.railgo-note { font-size: 11px; color: var(--secondary); }
 	.api-option {
 		flex: 1;
 		display: flex;

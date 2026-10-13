@@ -15,6 +15,7 @@ export const FEATURES = [
 	{ id: 'traffic-query', icon: 'fa-bus', label: '交通查询', path: 'traffic-query', group: 'station' },
 	{ id: 'station-code', icon: 'fa-building', label: '车站代码', path: 'station-code', group: 'station' },
 	{ id: 'station-area', icon: 'fa-stairs', label: '站台规模', path: 'station-area', group: 'station' },
+	{ id: 'sale-time', icon: 'fa-clock', label: '开售时间', path: 'sale-time', group: 'station' },
 
 	{ id: 'emu-query', icon: 'fa-subway', label: '运用担当', path: 'emu-query', group: 'tools' },
 	{ id: 'rail-network-map', icon: 'fa-map', label: '路网地图', path: 'rail-network-map', group: 'tools' },
@@ -35,7 +36,7 @@ export const SECTIONS = [
 		title: '车站服务',
 		subtitle: '车站信息、检票口查询及交通接驳指南',
 		icon: 'fa-building',
-		features: ['station-screen', 'ticket-gate', 'traffic-query', 'station-code', 'station-area'],
+		features: ['station-screen', 'ticket-gate', 'traffic-query', 'station-code', 'station-area', 'sale-time'],
 	},
 	{
 		id: 'tools',

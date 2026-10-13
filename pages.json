@@ -63,6 +63,14 @@
             }
         },
         {
+            "path": "pages/sale-time/sale-time",
+            "style": {
+                "navigationBarTitleText": "车站开售时间",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
             "path": "pages/station-area/station-area",
             "style": {
                 "navigationBarTitleText": "站台规模"

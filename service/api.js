@@ -64,7 +64,7 @@ export function resolveBase(endpoint) {
  */
 function endpointUrl(endpoint, r) {
 	// 新/旧的 v2 风格端点需要尾斜杠（避免 301）；RailGo 不能带尾斜杠
-	const slashed = ['getStationBigScreen', 'getExit', 'mapLine', 'getStationArea', 'getLineTrains', 'getStationInfo']
+	const slashed = ['getStationBigScreen', 'getExit', 'mapLine', 'getStationArea', 'getLineTrains', 'getStationInfo', 'getStationSaleTimeInfo']
 	if (r.source === 'railgo') {
 		return r.base + '/' + endpoint
 	}
@@ -270,6 +270,64 @@ export function getAmapStaticMap(size, markers, paths) {
 	if (markers) url += `&markers=${encodeURIComponent(markers)}`
 	if (paths) url += `&paths=${encodeURIComponent(paths)}`
 	return url
+}
+
+
+/**
+ * 车站开售时间 —— 自有数据源
+ * GET /getStationSaleTimeInfo/   （返回全部车站，约 3149 条 / 800KB，忽略入参）
+ *
+ * 返回项：{ bureau_code, station_name, station_telecode, sale_time, ... }
+ * sale_time 为 4 位字符串，如 "1630" 表示每日 16:30 起售。
+ */
+export function getStationSaleTimeInfo() {
+	return requestEndpoint('getStationSaleTimeInfo')
+}
+
+/** 铁路局代码 → 名称 */
+export const BUREAU_NAMES = {
+	B: '哈尔滨局', C: '呼和浩特局', F: '郑州局', G: '南昌局', H: '上海局',
+	I: '边境口岸', J: '兰州局', K: '济南局', M: '昆明局', N: '武汉局',
+	O: '青藏铁路公司', P: '北京局', Q: '广铁集团', R: '乌鲁木齐局', T: '沈阳局',
+	U: '广东城际铁路公司', V: '太原局', W: '成都局', X: '香港铁路公司',
+	Y: '西安局', Z: '南宁局'
+}
+
+/** 路局简码 → 简称（如 B → 哈局） */
+export const BUREAU_SHORT_NAMES = {
+	B: '哈局', C: '呼局', F: '郑局', G: '南局', H: '上局',
+	I: '口岸', J: '兰局', K: '济局', M: '昆局', N: '武局',
+	O: '青藏', P: '京局', Q: '广铁', R: '乌局', T: '沈局',
+	U: '广东城际', V: '太局', W: '成局', X: '港铁',
+	Y: '西局', Z: '宁局'
+}
+
+/**
+ * 路局备注（号段来历等，供设置页/文档展示）
+ * 「-」（国际联运）实际不使用，故不列入上表。
+ */
+export const BUREAU_NOTES = {
+	I: '实际作为转义字符，不作常规使用',
+	U: '原归属上海局徐州分局，铁路分局建制撤销后号段清空，后由广东城际接手使用',
+	X: '原归属齐齐哈尔局，并入哈尔滨局后号段清空，后由港铁接手使用'
+}
+
+/** 取路局全称；未收录的代码返回空串 */
+export function bureauName(code) {
+	return BUREAU_NAMES[String(code || '').trim().toUpperCase()] || ''
+}
+
+/** 取路局简称；未收录时回退为全称 */
+export function bureauShortName(code) {
+	const c = String(code || '').trim().toUpperCase()
+	return BUREAU_SHORT_NAMES[c] || BUREAU_NAMES[c] || ''
+}
+
+/** "1630" → "16:30" */
+export function formatSaleTime(t) {
+	const s = String(t || '').trim()
+	if (!/^\d{4}$/.test(s)) return s || '—'
+	return s.slice(0, 2) + ':' + s.slice(2)
 }
 
 /**
@@ -577,6 +635,13 @@ export default {
 	getRailwayIndex,
 	getRailwayGeoJSON,
 	getAmapStaticMap,
+	getStationSaleTimeInfo,
+	formatSaleTime,
+	BUREAU_NAMES,
+	BUREAU_SHORT_NAMES,
+	BUREAU_NOTES,
+	bureauName,
+	bureauShortName,
 	getTrainData,
 	getTrainSetOfTrain,
 	getTrainsOfTrainSet,
