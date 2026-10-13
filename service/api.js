@@ -312,6 +312,17 @@ export const BUREAU_NOTES = {
 	X: '原归属齐齐哈尔局，并入哈尔滨局后号段清空，后由港铁接手使用'
 }
 
+/**
+ * 是否为已撤销（停办）车站
+ *
+ * 数据源中 bureau_code 为空的车站即属此类：路局建制已撤销，
+ * 不再有开售时间。目前共 6 个，其 station_telecode 同样为空 ——
+ * 电报码随路局号段一同注销，可作为佐证。
+ */
+export function isClosedStation(item) {
+	return !String((item && item.bureau_code) || '').trim()
+}
+
 /** 取路局全称；未收录的代码返回空串 */
 export function bureauName(code) {
 	return BUREAU_NAMES[String(code || '').trim().toUpperCase()] || ''
@@ -641,6 +652,7 @@ export default {
 	BUREAU_SHORT_NAMES,
 	BUREAU_NOTES,
 	bureauName,
+	isClosedStation,
 	bureauShortName,
 	getTrainData,
 	getTrainSetOfTrain,

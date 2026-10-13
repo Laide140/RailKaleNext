@@ -44,7 +44,9 @@
 					</view>
 					<view class="row-right">
 						<text class="row-time">{{ fmt(s.sale_time) }}</text>
-						<text class="row-bureau" v-if="bureau(s.bureau_code)">{{ bureau(s.bureau_code) }}局</text>
+						<!-- 无路局归属 = 已撤销车站，给出明确标注而非留空 -->
+						<text class="row-bureau" v-if="bureau(s.bureau_code)">{{ bureau(s.bureau_code) }}</text>
+						<text class="row-closed" v-else>已停办</text>
 					</view>
 				</view>
 			</view>
@@ -58,6 +60,11 @@
 			<!-- 列表过长时提示 -->
 			<view class="limit-hint" v-if="filtered.length > showLimit">
 				<text>仅显示前 {{ showLimit }} 条，请继续输入以缩小范围</text>
+			</view>
+
+			<!-- 名词说明 -->
+			<view class="footnote" v-if="list.length">
+				<text>「已停办」指该站所属路局建制已撤销，不再有开售时间。</text>
 			</view>
 		</template>
 	</view>
@@ -242,6 +249,14 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.row-bureau { font-size: 11px; color: var(--secondary); }
+	/* 已停办车站：中性描边标记，不用彩色以免与语义色混淆 */
+	.row-closed {
+		font-size: 11px;
+		color: var(--secondary);
+		border: 0.5px solid var(--separator);
+		border-radius: 4px;
+		padding: 0 5px;
+	}
 
 	/* ===== 空态 ===== */
 	.empty-state {
@@ -251,5 +266,9 @@
 	.empty-icon { font-size: 34px; color: var(--theme-text); opacity: 0.5; }
 	.limit-hint {
 		text-align: center; padding: 16px 0; font-size: 12px; color: var(--secondary);
+	}
+	.footnote {
+		text-align: center; padding: 14px 20px 0;
+		font-size: 11px; line-height: 1.6; color: var(--secondary);
 	}
 </style>
