@@ -923,10 +923,19 @@
 		background: var(--card2);
 	}
 
-	.car-scroll { width: 100%; white-space: nowrap; }
+	/* 车厢图横向滚动区。
+	 * 不用负边距外扩 —— scroll-view 内部有独立滚动容器，
+	 * 负边距在部分端上会与实际滚动区错位，这里保持常规布局。 */
+	.car-scroll {
+		width: 100%;
+		white-space: nowrap;
+	}
 	.car-scroll-row { display: inline-flex; gap: 10px; padding-bottom: 4px; }
+	/* 车厢图为超宽横图（1767x400，约 4.4:1），
+	 * 宽度给小了高度只剩几十像素、内容看不清。
+	 * 这里放大到 620px（高度约 140px），并在卡片内独立横向滚动查看。 */
 	.car-diagram {
-		width: 280px;
+		width: 620px;
 		flex-shrink: 0;
 		border-radius: 8px;
 		background: var(--card2);
