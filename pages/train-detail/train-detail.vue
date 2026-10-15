@@ -262,7 +262,8 @@
 					<view class="card-head">
 						<i class="fas fa-train-subway card-icon"></i>
 						<text class="card-title">车厢图</text>
-						<text class="card-live">左右滑动 · 点按放大</text>
+						<text class="card-live" v-if="formation">{{ formation }} 编组 · 左右滑动</text>
+						<text class="card-live" v-else>左右滑动 · 点按放大</text>
 					</view>
 					<scroll-view class="car-scroll" scroll-x show-scrollbar="false">
 						<view class="car-scroll-row">
@@ -344,6 +345,7 @@
 				// 车组资料
 				carInfo: [],
 				carDiagrams: [],
+				formation: 0,
 				carPic: '',
 				carInfoLoading: false,
 				carPicFailed: false,
@@ -553,6 +555,7 @@
 				this.trainSetTrains = []
 				this.carInfo = []
 				this.carDiagrams = []
+				this.formation = 0
 				this.carPic = ''
 				this.carPicFailed = false
 				this.carDiagramBroken = {}
@@ -583,6 +586,7 @@
 					const res = await getTrainSetInfo(this.trainSet)
 					this.carInfo = res.info || []
 					this.carDiagrams = res.diagrams || []
+					this.formation = res.formation || 0
 					this.carPic = res.carPic || carPicUrl(this.trainSet)
 				} catch (e) {
 					this.carInfo = []

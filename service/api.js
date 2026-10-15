@@ -430,12 +430,63 @@ export function carPicUrl(trainSet) {
 }
 
 /** 车厢图地址：index 0~7 */
+/** 车厢图地址：按车型取，index 为车厢序号（从 0 开始） */
 export function carDiagramUrl(trainSet, index) {
-	return `${RAILWAY_ASSET_BASE}/${encodeURIComponent(String(trainSet).trim())}/${index}.png`
+	return `${RAILWAY_ASSET_BASE}/${encodeURIComponent(carModelOf(trainSet))}/${index}.png`
 }
 
-/** 车厢图可选标号 */
-export const CAR_DIAGRAM_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7]
+/** 车型 → 编组节数 的内存缓存（本次会话内有效） */
+const formationCache = {}
+
+/**
+ * 编组车厢数探测
+ *
+ * 图片按编组数量命名，需 HEAD 探测确定实际编组：
+ *   16.png 存在 → 16 或 17 编组（17 编组的图即为 16.png）
+ *   15.png 存在 → 15 编组
+ *   都不存在   → 8 编组
+ *
+ * 注意：由调用方保证只探测一次并缓存结果（见 formationCache）。
+ * @param {string} trainSet 车组号
+ * @returns {Promise<number>} 车厢节数（16 | 15 | 8）
+ */
+export async function detectFormation(trainSet) {
+	const model = carModelOf(trainSet)
+	if (!model) return 8
+	// 同一车型的编组固定，探测结果按车型缓存，避免每个车组都探两次
+	if (formationCache[model] !== undefined) return formationCache[model]
+
+	// 用 GET 而非 HEAD 探测：HEAD 在 App/小程序端支持不稳定
+	// （常被当作 GET 或直接失败），GET 各端行为一致。
+	// 这里只探测两次且结果按车型缓存，开销可接受。
+	const exists = (n) => new Promise((resolve) => {
+		uni.request({
+			url: `${RAILWAY_ASSET_BASE}/${encodeURIComponent(model)}/${n}.png`,
+			method: 'GET',
+			timeout: 8000,
+			success: (r) => resolve(r.statusCode === 200),
+			fail: () => resolve(false)
+		})
+	})
+
+	let n = 8
+	if (await exists(16)) n = 16
+	else if (await exists(15)) n = 15
+
+	formationCache[model] = n
+	return n
+}
+
+/**
+ * 生成某车型全部车厢图地址
+ * @param {string} trainSet
+ * @param {number} count 编组节数
+ */
+export function carDiagramUrls(trainSet, count) {
+	const out = []
+	for (let i = 0; i < count; i++) out.push(carDiagramUrl(trainSet, i))
+	return out
+}
 
 /** carInfo 的 pictureUrl（MD5 文件名）→ 12306 实际图片地址 */
 export function cateringImageUrl(pictureUrl) {
@@ -459,6 +510,9 @@ export async function getTrainSetInfo(trainSet) {
 	const set = String(trainSet || '').trim()
 	if (!set) return { info: [], diagrams: [], carPic: '' }
 
+	// 车厢图需要先探测编组节数（按车型缓存，同车型只探一次）
+	const count = await detectFormation(set)
+
 	const [info, diagrams] = await Promise.all([
 		new Promise((resolve) => {
 			uni.request({
@@ -473,11 +527,10 @@ export async function getTrainSetInfo(trainSet) {
 				fail: () => resolve([])
 			})
 		}),
-		// 车厢图：按约定直接给 0~7 的地址，不做探测
-		Promise.resolve(CAR_DIAGRAM_INDEXES.map(i => carDiagramUrl(set, i)))
+		Promise.resolve(carDiagramUrls(set, count))
 	])
 
-	return { info, diagrams, carPic: carPicUrl(set) }
+	return { info, diagrams, carPic: carPicUrl(set), formation: count }
 }
 
 /**
@@ -665,7 +718,8 @@ export default {
 	carDiagramUrl,
 	carModelOf,
 	cateringImageUrl,
-	CAR_DIAGRAM_INDEXES,
+	detectFormation,
+	carDiagramUrls,
 	parseStationCode,
 	getTrainBroadcastUrl,
 	getBaiduTtsUrl
