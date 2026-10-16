@@ -79,6 +79,25 @@
 <script>
 	import { getKey } from '@/common/keys.js'
 
+	/**
+	 * 取真正的原生 canvas 元素
+	 *
+	 * uni-app H5 下 <canvas canvas-id="x"> 会被渲染为
+	 *   <uni-canvas canvas-id="x"><canvas></canvas></uni-canvas>
+	 * 外层没有 getContext()，必须向内查找；
+	 * 同时兼容直接拿到原生 canvas 的情况（App/小程序差异）。
+	 */
+	function resolveNativeCanvas() {
+		const host = document.getElementById('trackCanvas')
+		if (!host) return null
+		// 本身已是原生 canvas
+		if (typeof host.getContext === 'function') return host
+		// uni-canvas 外壳：取内部的 canvas
+		const inner = host.querySelector && host.querySelector('canvas')
+		if (inner && typeof inner.getContext === 'function') return inner
+		return null
+	}
+
 	export default {
 		data() {
 			return {
@@ -173,6 +192,16 @@
 							zoomEnable: true
 						})
 						this.setupOverlayCanvas()
+						// 地图完成加载后再校正一次尺寸：
+						// 初始化瞬间容器可能尚未完成布局（高度为 0），
+						// 那样 canvas 会被设成 0 尺寸且之后再无机会重算。
+						if (this.map && this.map.on) {
+							this.map.on('complete', () => {
+								this._sizeCanvas()
+								this.redrawPath()
+							})
+						}
+						this.$nextTick(() => { this._sizeCanvas(); this.redrawPath() })
 						this.mapReady = true
 						this.statusText = '点击开始进行定位测速'
 						this.drawPlaceholder()
@@ -187,10 +216,15 @@
 			setupOverlayCanvas() {
 				const el = document.getElementById('amapContainer')
 				if (!el) return
-				const cv = document.getElementById('trackCanvas')
+
+				// 注意：uni-app 把 <canvas> 包成了 <uni-canvas>，
+				// getElementById 拿到的是外壳元素，它没有 getContext()。
+				// 真正的 2D 上下文要从内部的原生 <canvas> 取。
+				const cv = resolveNativeCanvas()
 				if (!cv) return
 				this._canvasEl = cv
 				this._g = cv.getContext('2d')
+				if (!this._g) return
 				this._sizeCanvas()
 
 				this.map.on('moveend', () => this.redrawPath())
@@ -208,8 +242,9 @@
 			// 让叠加 canvas 与地图容器尺寸一致，并按 DPR 适配，避免模糊/错位
 			_sizeCanvas() {
 				const el = document.getElementById('amapContainer')
-				const cv = this._canvasEl
+				const cv = this._canvasEl || resolveNativeCanvas()
 				if (!el || !cv) return
+				this._canvasEl = cv
 				const rect = el.getBoundingClientRect()
 				const dpr = window.devicePixelRatio || 1
 				this._mapRect = { width: rect.width, height: rect.height }
