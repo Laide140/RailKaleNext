@@ -1,6 +1,6 @@
 <template>
 	<view class="page" :style="themeStyle">
-		<!-- 顶部搜索框 -->
+		<!-- 顶部搜索框：右侧为日期选择 -->
 		<view class="search-section">
 			<i class="fas fa-search search-icon"></i>
 			<input
@@ -12,10 +12,10 @@
 				@confirm="doSearch"
 			/>
 			<text class="search-cancel" v-if="searchText" @tap="searchText = ''">✕</text>
-			<!-- 日期选择：点击弹出日历，改日期后按新日期重查 -->
-			<view class="date-btn" @tap="pickDate">
+			<!-- 日期选择：输入框右侧的日历入口 -->
+			<view class="search-date" @tap="pickDate">
 				<i class="fas fa-calendar-day"></i>
-				<text class="date-text">{{ shortDate }}</text>
+				<text class="search-date-text">{{ shortDate }}</text>
 			</view>
 			<view class="search-btn" @tap="doSearch">查询</view>
 		</view>
@@ -699,10 +699,10 @@
 
 	/* ===== 搜索 ===== */
 	.search-section {
-		display: flex; align-items: center; gap: 10px;
+		display: flex; align-items: center; gap: 8px;
 		background: var(--card);
 		border-radius: 12px;
-		padding: 10px 10px 10px 16px;
+		padding: 8px 8px 8px 14px;
 		margin-bottom: 14px;
 		border: 1px solid var(--theme-border);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
@@ -710,7 +710,25 @@
 	.search-icon { font-size: 17px; color: var(--theme-text); }
 	.search-input { flex: 1; font-size: 17px; color: var(--label); height: 38px; }
 	.search-placeholder { color: var(--secondary); }
-	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 6px; }
+	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 4px; }
+	/* 输入框右侧的日期入口：日历图标 + 月日，与查询按钮同一行 */
+	.search-date {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		height: 36px;
+		padding: 0 8px;
+		border-radius: 8px;
+		background: var(--theme-soft);
+		i { font-size: 14px; color: var(--theme-text); }
+	}
+	.search-date-text {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--theme-text);
+		font-variant-numeric: tabular-nums;
+	}
 	.search-btn {
 		flex-shrink: 0;
 		background: var(--theme);
@@ -719,21 +737,6 @@
 		font-weight: 600;
 		border-radius: 10px;
 		padding: 8px 16px;
-	}
-	/* 日期选择按钮：日历图标 + 月日 */
-	.date-btn {
-		flex-shrink: 0;
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 0 6px;
-		i { font-size: 15px; color: var(--theme-text); }
-	}
-	.date-text {
-		font-size: 13px;
-		font-weight: 600;
-		color: var(--theme-text);
-		font-variant-numeric: tabular-nums;
 	}
 
 	/* ===== 车次标题 ===== */

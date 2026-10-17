@@ -396,29 +396,40 @@ export function todayStr() {
 
 /**
  * 车组运用数据（车次 ↔ 车组号 担当关系）— 自有数据源
- * GET /getTrainData/?train={车次或车组号}
+ * GET /api/getTrainInfo/?train={车次}&date={YYYYMMDD}   按车次查
+ * GET /api/getTrainInfo/?tn={车组号}&date={YYYYMMDD}    按车组查
  *
- * 服务端按入参自动判断返回形态：
- *   传车次（G1）              → data 为对象 { train, trainSet, type }
- *   传车组（CR400BF-A-5054）  → data 为数组 [{ train, trainSet, type }, ...]
+ * 注意参数名不同：按车次查用 train，按车组查必须用 tn。
+ * 传错参数会报「未找到车次」/「缺少 train 参数」，不会自动识别。
+ *
+ * 返回形态：
+ *   传车次 → data 为对象 { train, carGroup, date }
+ *   传车组 → data 为数组 [{ train, carGroup, date }, ...]
  *
  * @param {'train'|'emu'} mode
  * @param {string} value 车次号或车组号
+ * @param {string} date  可选，'YYYY-MM-DD' 或 'YYYYMMDD'
  * @returns {Promise<{list: Array, single: Object|null}>}
  */
-export function getTrainData(mode, value) {
+export function getTrainData(mode, value, date) {
+	const key = mode === 'emu' ? 'tn' : 'train'
+	const day = String(date || '').replace(/-/g, '')
+	let url = NEXT_BASE + '/getTrainInfo/?' + key + '=' + encodeURIComponent(value)
+	if (/^\d{8}$/.test(day)) url += '&date=' + day
 	return new Promise((resolve) => {
 		uni.request({
-			url: NEXT_BASE + '/getTrainData/?train=' + encodeURIComponent(value),
+			url,
 			responseType: 'text',
 			timeout: 15000,
 			success: (r) => {
 				try {
 					const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
-					if (!res || res.code !== 200) return resolve({ list: [], single: null })
+					if (!res || !res.success) return resolve({ list: [], single: null })
+					// 字段名统一为 trainSet，方便页面复用
+					const norm = (o) => (o ? { train: o.train, trainSet: o.carGroup || '', date: o.date || '' } : null)
 					const data = res.data
-					if (Array.isArray(data)) return resolve({ list: data.filter(Boolean), single: null })
-					return resolve({ list: data ? [data] : [], single: data || null })
+					if (Array.isArray(data)) return resolve({ list: data.map(norm).filter(Boolean), single: null })
+					return resolve({ list: data ? [norm(data)] : [], single: norm(data) })
 				} catch (e) {
 					resolve({ list: [], single: null })
 				}
@@ -433,8 +444,8 @@ export function getTrainData(mode, value) {
  * @param {string} train
  * @returns {Promise<string>}
  */
-export async function getTrainSetOfTrain(train) {
-	const res = await getTrainData('train', train)
+export async function getTrainSetOfTrain(train, date) {
+	const res = await getTrainData('train', train, date)
 	if (res.single && res.single.trainSet) return res.single.trainSet
 	return (res.list[0] && res.list[0].trainSet) || ''
 }
@@ -444,8 +455,8 @@ export async function getTrainSetOfTrain(train) {
  * @param {string} trainSet 车组号，如 CR400BF-A-5054
  * @returns {Promise<Array>}
  */
-export async function getTrainsOfTrainSet(trainSet) {
-	const res = await getTrainData('emu', trainSet)
+export async function getTrainsOfTrainSet(trainSet, date) {
+	const res = await getTrainData('emu', trainSet, date)
 	return res.list
 }
 
@@ -494,45 +505,81 @@ const formationCache = {}
 /**
  * 编组车厢数探测
  *
- * 图片按序号命名，序号从 0 开始，因此 N 编组共 N 张图、末张为 (N-1).png：
+ * 首选 carInfo.json 里的「列车编组」字段（pictureValue 形如 "16辆"）——
+ * 该文件与 API 同域，跨域可读，且一次请求就能拿到全部资料。
+ *
+ * 拿不到时退回图片探测，图片按序号命名、序号从 0 开始，N 编组共 N 张图：
  *   8 编组  → 0.png ~ 7.png
  *   16 编组 → 0.png ~ 15.png
  *   17 编组 → 0.png ~ 16.png
+ * 即 16.png 存在 → 17 编组，15.png 存在 → 16 编组，都不存在 → 8 编组。
  *
- * 因此用 16.png 是否存在区分 16/17 编组，15.png 是否存在区分是否长编组，
- * 都不存在即 8 编组。返回值是编组节数，取图时直接用 0 ~ count-1 的下标。
+ * 注意：图片目录不带 CORS 头，浏览器端跨域时探测会失败，
+ * 因此正常路径必须走 carInfo.json；探测仅作非浏览器端的兜底。
  *
- * 注意：由调用方保证只探测一次并缓存结果（见 formationCache）。
  * @param {string} trainSet 车组号
  * @returns {Promise<number>} 编组节数（8 | 16 | 17）
  */
 export async function detectFormation(trainSet) {
 	const model = carModelOf(trainSet)
 	if (!model) return 8
-	// 同一车型的编组固定，探测结果按车型缓存，避免每个车组都探两次
+	// 同一车型的编组固定，探测结果按车型缓存，避免每个车组重复请求
 	if (formationCache[model] !== undefined) return formationCache[model]
 
-	// 用 GET 而非 HEAD 探测：HEAD 在 App/小程序端支持不稳定
-	// （常被当作 GET 或直接失败），GET 各端行为一致。
-	// 这里只探测两次且结果按车型缓存，开销可接受。
+	// 首选：carInfo.json 的「列车编组」
+	const fromInfo = await formationFromCarInfo(model)
+	if (fromInfo) {
+		formationCache[model] = fromInfo
+		return fromInfo
+	}
+
+	// 兜底：探测末张图是否存在
 	const exists = (n) => new Promise((resolve) => {
 		uni.request({
 			url: `${RAILWAY_ASSET_BASE}/${encodeURIComponent(model)}/${n}.png`,
-			method: 'GET',
+			method: 'HEAD',
+			responseType: 'text',   // 避免 404 响应体被当 JSON 解析
+			dataType: 'text',
 			timeout: 8000,
 			success: (r) => resolve(r.statusCode === 200),
 			fail: () => resolve(false)
 		})
 	})
 
-	// 末张图的下标决定编组：16.png 存在 → 17 编组，
-	// 否则 15.png 存在 → 16 编组，都不是则 8 编组。
 	let n = 8
 	if (await exists(16)) n = 17
 	else if (await exists(15)) n = 16
 
 	formationCache[model] = n
 	return n
+}
+
+/**
+ * 从 carInfo.json 读取编组节数
+ * 「列车编组」条目的 pictureValue 形如 "16辆"，取其中的数字即可。
+ * @returns {Promise<number>} 读不到时返回 0
+ */
+function formationFromCarInfo(model) {
+	return new Promise((resolve) => {
+		uni.request({
+			url: `${RAILWAY_ASSET_BASE}/${encodeURIComponent(model)}/carInfo.json`,
+			responseType: 'text',
+			dataType: 'text',
+			timeout: 10000,
+			success: (r) => {
+				try {
+					const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					if (!Array.isArray(d)) return resolve(0)
+					const row = d.find(x => x && x.pictureName === '列车编组')
+					const m = /(\d+)/.exec(String((row && row.pictureValue) || ''))
+					resolve(m ? Number(m[1]) : 0)
+				} catch (e) {
+					resolve(0)
+				}
+			},
+			fail: () => resolve(0)
+		})
+	})
 }
 
 /**
@@ -566,29 +613,51 @@ export function cateringImageUrl(pictureUrl) {
  */
 export async function getTrainSetInfo(trainSet) {
 	const set = String(trainSet || '').trim()
-	if (!set) return { info: [], diagrams: [], carPic: '' }
+	if (!set) return { info: [], diagrams: [], carPic: '', formation: 0 }
 
-	// 车厢图需要先探测编组节数（按车型缓存，同车型只探一次）
-	const count = await detectFormation(set)
+	// carInfo.json 同时提供资料与编组节数，只请求一次
+	const info = await fetchCarInfo(set)
+	let count = formationOfInfo(info)
+	if (!count) {
+		// carInfo 里没有编组字段时才退回探测（按车型缓存）
+		count = await detectFormation(set)
+	} else {
+		formationCache[carModelOf(set)] = count
+	}
 
-	const [info, diagrams] = await Promise.all([
-		new Promise((resolve) => {
-			uni.request({
-				url: carInfoUrl(set),
-				timeout: 15000,
-				success: (r) => {
-					try {
-						const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
-						resolve(Array.isArray(d) ? d.sort((a, b) => (a.picOrder || 0) - (b.picOrder || 0)) : [])
-					} catch (e) { resolve([]) }
-				},
-				fail: () => resolve([])
-			})
-		}),
-		Promise.resolve(carDiagramUrls(set, count))
-	])
+	return {
+		info,
+		diagrams: carDiagramUrls(set, count || 8),
+		carPic: carPicUrl(set),
+		formation: count || 0
+	}
+}
 
-	return { info, diagrams, carPic: carPicUrl(set), formation: count }
+/** 拉 carInfo.json，按 picOrder 排序；失败返回空数组 */
+function fetchCarInfo(trainSet) {
+	return new Promise((resolve) => {
+		uni.request({
+			url: carInfoUrl(trainSet),
+			responseType: 'text',
+			dataType: 'text',
+			timeout: 15000,
+			success: (r) => {
+				try {
+					const d = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					resolve(Array.isArray(d) ? d.slice().sort((a, b) => (a.picOrder || 0) - (b.picOrder || 0)) : [])
+				} catch (e) { resolve([]) }
+			},
+			fail: () => resolve([])
+		})
+	})
+}
+
+/** 从已拉到的 carInfo 数组里取编组节数，读不到返回 0 */
+function formationOfInfo(info) {
+	if (!Array.isArray(info)) return 0
+	const row = info.find(x => x && x.pictureName === '列车编组')
+	const m = /(\d+)/.exec(String((row && row.pictureValue) || ''))
+	return m ? Number(m[1]) : 0
 }
 
 /**

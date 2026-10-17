@@ -10,12 +10,19 @@
 				:value="modeIndex"
 				@change="onModeChange"
 			/>
-			<input
-				class="search-input"
-				v-model="query"
-				:placeholder="mode === 'train' ? '输入车次号，如：G1' : '输入车组号，如：CR400BF-A-5054'"
-				@confirm="search"
-			/>
+			<view class="search-row">
+				<input
+					class="search-input"
+					v-model="query"
+					:placeholder="mode === 'train' ? '输入车次号，如：G1' : '输入车组号，如：CR400BF-A-5054'"
+					@confirm="search"
+				/>
+				<!-- 日期选择：输入框右侧的日历入口 -->
+				<view class="search-date" @tap="pickDate">
+					<i class="fas fa-calendar-day"></i>
+					<text class="search-date-text">{{ shortDate }}</text>
+				</view>
+			</view>
 			<button class="search-btn" @tap="search">查询</button>
 		</view>
 
@@ -25,22 +32,22 @@
 
 		<!-- 车次 → 担当车组（基于已查询的快照，不受输入框实时编辑影响） -->
 		<view class="result" v-if="!loading && searched.mode === 'train' && single">
-			<view class="result-title">车次 {{ searched.query }} 的担当车组</view>
+			<view class="result-title">车次 {{ searched.query }} 的担当车组<text class="result-date">{{ searched.date }}</text></view>
 			<view class="record" @tap="goTrainsOfSet(single.trainSet)">
 				<view class="record-body">
 					<text class="record-main">{{ single.trainSet }}</text>
-					<text class="record-sub">{{ single.type }} 次 · 点击查看该车组全部车次</text>
+					<text class="record-sub">{{ singleType }} · 点击查看该车组全部车次</text>
 				</view>
 			</view>
 		</view>
 
 		<!-- 车组 → 担当车次 -->
 		<view class="result" v-if="!loading && searched.mode === 'emu' && list.length">
-			<view class="result-title">车组 {{ searched.query }} 担当 {{ list.length }} 趟车次</view>
+			<view class="result-title">车组 {{ searched.query }} 担当 {{ list.length }} 趟车次<text class="result-date">{{ searched.date }}</text></view>
 			<view class="record" v-for="(r, i) in list" :key="i" @tap="goTrainDetail(r.train)">
 				<view class="record-body">
 					<text class="record-main">{{ r.train }}</text>
-					<text class="record-sub">{{ r.type }} 次</text>
+					<text class="record-sub">{{ typeOf(r.train) }} 次</text>
 				</view>
 				<i class="fas fa-chevron-right record-arrow"></i>
 			</view>
@@ -49,19 +56,14 @@
 		<view class="empty" v-if="!loading && !hasResult">
 			<text>{{ searched.query ? '未查询到记录' : '输入车次或车组号开始查询' }}</text>
 		</view>
-	</view>
 		<app-toast ref="toast" />
+		<app-date-picker ref="datePick" />
+	</view>
 </template>
 
 <script>
-	import { getTrainData } from '@/service/api.js'
+	import { getTrainData, todayStr } from '@/service/api.js'
 	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
-
-	// 车次详情页需要日期（同一车次不同日期担当车组可能不同），这里默认今天
-	function formatToday() {
-		const d = new Date()
-		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-	}
 
 	export default {
 		components: { SlideTabs },
@@ -72,6 +74,7 @@
 				// 已执行查询的快照：结果区只依据它渲染，
 				// 这样编辑输入框或切换类型时不会让已有结果跟着变
 				searched: { query: '', mode: '' },
+				date: todayStr(),
 				loading: false,
 				single: null,
 				list: [],
@@ -84,6 +87,18 @@
 			},
 			modeIndex() {
 				return this.mode === 'emu' ? 1 : 0
+			},
+			// 搜索行里显示的简短日期
+			shortDate() {
+				const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(this.date || '')
+				if (!m) return this.date || '选择日期'
+				return m[1] === String(new Date().getFullYear())
+					? `${+m[2]}月${+m[3]}日` : `${m[1]}-${m[2]}-${m[3]}`
+			},
+			singleType() {
+				if (!this.single) return ''
+				const t = this.typeOf(this.single.train)
+				return t ? `${t} 次` : '车次'
 			},
 			hasResult() {
 				if (!this.searched.mode) return false
@@ -122,12 +137,25 @@
 				this.single = null
 				this.list = []
 
-				const res = await getTrainData(mode, q)
+				const day = this.date
+				const res = await getTrainData(mode, q, day)
 				this.loading = false
 				// 查询期间用户可能改了类型/关键词，此时以当前值重新判定
-				this.searched = { query: q, mode }
+				this.searched = { query: q, mode, date: day }
 				if (mode === 'train') this.single = res.single
 				else this.list = res.list
+			},
+			// 车次首字母即车次类型（G/D/C…），接口已不再返回 type 字段
+			typeOf(train) {
+				const m = /^([A-Z]+)/.exec(String(train || ''))
+				return m ? m[1] : ''
+			},
+			async pickDate() {
+				const v = await this.datePick({ value: this.date, title: '查询日期' })
+				if (!v || v === this.date) return
+				this.date = v
+				// 日期变了就按新日期重查，结果与日期保持一致
+				if (this.searched.query) this.search()
 			},
 			goTrainsOfSet(trainSet) {
 				if (!trainSet) return
@@ -138,7 +166,7 @@
 			goTrainDetail(train) {
 				if (!train) return
 				uni.navigateTo({
-					url: `/pages/train-detail/train-detail?train=${encodeURIComponent(train)}&date=${formatToday()}`
+					url: `/pages/train-detail/train-detail?train=${encodeURIComponent(train)}&date=${this.date}`
 				})
 			}
 		}
@@ -152,7 +180,13 @@
 	.toggle-bar { display: flex; margin-bottom: 16rpx; background: var(--fill); border-radius: 12rpx; padding: 4rpx; }
 	.toggle-btn { flex: 1; text-align: center; padding: 12rpx 0; border-radius: 10rpx; font-size: 26rpx; color: var(--secondary); }
 	.toggle-btn.active { background: #fff; color: var(--theme-text); font-weight: bold; }
-	.search-input { width: 100%; height: 80rpx; padding: 0 20rpx; background: var(--fill); border-radius: 12rpx; font-size: 28rpx; margin-bottom: 16rpx; color: var(--label); box-sizing: border-box; }
+	.search-row { display: flex; align-items: center; gap: 12rpx; margin-bottom: 16rpx; }
+	.search-input { flex: 1; height: 80rpx; padding: 0 20rpx; background: var(--fill); border-radius: 12rpx; font-size: 28rpx; color: var(--label); box-sizing: border-box; }
+	/* 输入框右侧的日期入口 */
+	.search-date { flex-shrink: 0; display: flex; align-items: center; gap: 8rpx; height: 80rpx; padding: 0 16rpx; border-radius: 12rpx; background: var(--theme-soft); }
+	.search-date i { font-size: 24rpx; color: var(--theme-text); }
+	.search-date-text { font-size: 24rpx; font-weight: 600; color: var(--theme-text); font-variant-numeric: tabular-nums; }
+	.result-date { font-size: 22rpx; font-weight: normal; color: var(--secondary); margin-left: 12rpx; }
 	.search-btn { width: 100%; background: var(--theme); color: #fff; font-size: 28rpx; height: 80rpx; line-height: 80rpx; text-align: center; border-radius: 12rpx; }
 	.loading, .empty { text-align: center; padding: 60rpx 0; color: var(--secondary); font-size: 28rpx; }
 	/* 错误提示：保留语义红色 */
