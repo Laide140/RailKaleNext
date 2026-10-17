@@ -250,23 +250,40 @@
 				}
 			},
 
-			// 让叠加 canvas 与地图容器尺寸一致，并按 DPR 适配，避免模糊/错位
+			/**
+			 * 让叠加 canvas 与地图容器尺寸一致，并按 DPR 适配
+			 *
+			 * 关键点：给 cv.width / cv.height 赋值会**重置整个上下文状态**
+			 * （包括此前的 setTransform），所以每次设完尺寸都必须重新
+			 * setTransform，否则坐标系会退回设备像素，绘制位置整体放大 DPR 倍
+			 * —— 表现为「拖动后轨迹偏移巨大」。
+			 */
 			_sizeCanvas() {
 				const el = document.getElementById('amapContainer')
 				const cv = this._canvasEl || resolveNativeCanvas()
 				if (!el || !cv) return
 				this._canvasEl = cv
 				const rect = el.getBoundingClientRect()
+				if (!rect.width || !rect.height) return   // 容器还没布局好，等下次
 				const dpr = window.devicePixelRatio || 1
 				this._mapRect = { width: rect.width, height: rect.height }
 				this._dpr = dpr
+
 				cv.style.width = rect.width + 'px'
 				cv.style.height = rect.height + 'px'
-				cv.width = Math.round(rect.width * dpr)
-				cv.height = Math.round(rect.height * dpr)
+				const dw = Math.round(rect.width * dpr)
+				const dh = Math.round(rect.height * dpr)
+				// 尺寸没变就不重设，避免无谓地重置上下文
+				if (cv.width !== dw || cv.height !== dh) {
+					cv.width = dw
+					cv.height = dh
+				}
 				const g = cv.getContext('2d')
 				this._g = g
+				// 必须在设置尺寸之后调用：赋值 width/height 会清空变换
 				g.setTransform(dpr, 0, 0, dpr, 0, 0)
+				// 投影中心依赖容器尺寸，尺寸变了要重算
+				this.refreshProjection()
 			},
 
 			// 无轨迹时的占位提示
@@ -289,7 +306,9 @@
 				if (!g || !this.map || !this._mapRect) return
 				// 每次重绘前刷新投影参数（纯数学，开销极小）
 				this.refreshProjection()
-				g.clearRect(0, 0, this._mapRect.width, this._mapRect.height)
+				// 坐标系已按 DPR 放大，故用 CSS 尺寸清除即可覆盖整个画布；
+				// 多留 1px 余量，避免浮点误差留下残边。
+				g.clearRect(0, 0, this._mapRect.width + 1, this._mapRect.height + 1)
 				const pts = this.points
 				// 轨迹点投影结果按 (点数, 投影版本) 缓存：
 				// 投影未变时（纯脉冲刷新）直接复用，跳过重复数学运算
@@ -353,7 +372,6 @@
 			refreshProjection() {
 				if (!this.map) return
 				try {
-					const size = this.map.getSize ? this.map.getSize() : null
 					const center = this.map.getCenter()
 					const z = this.map.getZoom()
 					const scale = 256 * Math.pow(2, z)
@@ -363,8 +381,13 @@
 					if (sinLat < -0.9999) sinLat = -0.9999
 					const cX = (cLng + 180) / 360 * scale
 					const cY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
-					const w = size ? size.getWidth() : (this._mapRect ? this._mapRect.width : 0)
-					const h = size ? size.getHeight() : (this._mapRect ? this._mapRect.height : 0)
+
+					// 中心点必须用「本 canvas 的 CSS 尺寸」，不能混用 map.getSize()：
+					// 容器经过 flex 布局或 resize 后两者可能短暂不一致，
+					// 一旦中心算错，整条轨迹会整体偏移。
+					const rect = this._mapRect
+					const w = rect && rect.width ? rect.width : (this.map.getSize ? this.map.getSize().getWidth() : 0)
+					const h = rect && rect.height ? rect.height : (this.map.getSize ? this.map.getSize().getHeight() : 0)
 					this._proj = { scale, cX, cY, ox: w / 2, oy: h / 2 }
 				} catch (e) {
 					this._proj = null
