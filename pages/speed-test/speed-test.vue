@@ -124,6 +124,7 @@
 				_tileLoaded: false,
 				_g: null,             // 高德地图叠加 canvas 的 2d context
 				_proj: null,          // 缓存的 Web Mercator 投影参数
+				settingCenter: false, // 正在 setCenter（期间忽略重绘，避免用旧中心投影）
 				_redrawTimer: null,   // 重绘节流定时器
 				_pathCache: [],       // 已投影的轨迹点缓存
 				_pathCacheKey: '',    // 缓存键（点数 | 投影参数）
@@ -233,11 +234,22 @@
 				if (!this._g) return
 				this._sizeCanvas()
 
-				// 拖动/缩放过程中也要重绘，否则 canvas 不跟随地图移动，
-				// 会看到轨迹「漂移」直到 moveend 才归位。
-				// 用节流控制频率，避免每帧重算拖慢地图。
-				const onMove = () => this.scheduleRedraw()
-				this.map.on('mapmove', onMove)      // 拖动/缩放进行中
+				// 只在移动/缩放**结束后**重绘。
+				//
+				// 不使用 mapmove 做实时重绘：拖动期间 map.getCenter() 返回的是
+				// 动画中间态，用它做投影基准会与地图实际渲染位置错位，
+				// 表现为轨迹「飞出去」。moveend 时中心已稳定，投影才准确。
+				// 拖动/缩放开始时先隐藏画布，结束后再显示并重绘：
+				// 这样过程中不会看到「轨迹与地图脱节」的错位画面。
+				const hide = () => {
+					if (this._canvasEl) this._canvasEl.style.visibility = 'hidden'
+				}
+				const onMove = () => {
+					if (this._canvasEl) this._canvasEl.style.visibility = 'visible'
+					this.scheduleRedraw()
+				}
+				this.map.on('movestart', hide)
+				this.map.on('zoomstart', hide)
 				this.map.on('moveend', onMove)
 				this.map.on('zoomend', onMove)
 				// 保存引用以便在 cleanup 时移除，避免监听泄漏
@@ -294,6 +306,9 @@
 			// 用高德 lngLatToContainer 把轨迹经纬度画到叠加 canvas 上（原生 2D）
 			// 节流重绘：拖动/缩放时短时间内只重绘一次
 			scheduleRedraw() {
+				// setCenter 尚未生效时不要重绘：此刻 getCenter() 还是旧值，
+				// 用旧中心投影新坐标会得到离谱的像素位置
+				if (this.settingCenter) return
 				if (this._redrawTimer) return
 				this._redrawTimer = setTimeout(() => {
 					this._redrawTimer = null
@@ -406,6 +421,21 @@
 				if (!isFinite(x) || !isFinite(y)) return null
 				if (out) { out.x = x; out.y = y; return out }
 				return { x, y }
+			},
+
+			/**
+			 * 判断画布坐标是否落在可视范围内（含一定外扩）
+			 *
+			 * 投影以地图中心为原点，若轨迹点与当前中心相距很远
+			 * （例如刚切换车次、定位跳变、setCenter 尚未生效），
+			 * 算出的像素值可能是六位数，直接画会把内容甩到画布外，
+			 * 视觉上就是「轨迹飞了」。这里做一次合理性过滤。
+			 */
+			isOnCanvas(xy, pad) {
+				if (!xy || !this._mapRect) return false
+				const m = pad === undefined ? 200 : pad
+				return xy.x >= -m && xy.x <= this._mapRect.width + m &&
+				       xy.y >= -m && xy.y <= this._mapRect.height + m
 			},
 
 			// 兼容旧调用名
@@ -539,9 +569,24 @@
 				}
 
 				// 高德地图跟随当前位置
+				//
+				// 注意：setCenter 是异步的，调用后 map.getCenter() 仍返回旧值。
+				// 若紧接着 redrawPath()，投影会以「旧中心 + 新轨迹点」计算，
+				// 像素坐标瞬间变成六位数、整条轨迹被甩出画布 —— 这正是
+				// 「一拖动位置就飞」的根源。所以必须等地图真正移动后再重绘。
 				if (this.map) {
+					this.settingCenter = true
 					this.map.setCenter([lng, lat])
-					this.redrawPath()
+					// 双保险：同时用 moveend 与定时兜底，避免个别端不触发回调
+					const done = () => {
+						if (!this.settingCenter) return
+						this.settingCenter = false
+						this.redrawPath()
+					}
+					try {
+						if (this.map.once) this.map.once('moveend', done)
+					} catch (e) {}
+					setTimeout(done, 260)
 				}
 				if (this.recording) this.statusText = '正在实时测速…'
 				this.startDrawLoop()
