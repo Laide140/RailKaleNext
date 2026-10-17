@@ -56,6 +56,12 @@
 	import { getTrainData } from '@/service/api.js'
 	import SlideTabs from '@/components/slide-tabs/slide-tabs.vue'
 
+	// 车次详情页需要日期（同一车次不同日期担当车组可能不同），这里默认今天
+	function formatToday() {
+		const d = new Date()
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	}
+
 	export default {
 		components: { SlideTabs },
 		data() {
@@ -131,7 +137,7 @@
 			goTrainDetail(train) {
 				if (!train) return
 				uni.navigateTo({
-					url: `/pages/train-detail/train-detail?train=${encodeURIComponent(train)}`
+					url: `/pages/train-detail/train-detail?train=${encodeURIComponent(train)}&date=${formatToday()}`
 				})
 			}
 		}

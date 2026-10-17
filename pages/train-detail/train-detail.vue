@@ -12,6 +12,20 @@
 				@confirm="doSearch"
 			/>
 			<text class="search-cancel" v-if="searchText" @tap="searchText = ''">✕</text>
+			<!-- 日期选择：点击弹出系统日历，改日期后按新日期重查 -->
+			<picker
+				ref="datePicker"
+				mode="date"
+				:value="date"
+				:start="dateStart"
+				:end="dateEnd"
+				@change="onDateChange"
+			>
+				<view class="date-btn">
+					<i class="fas fa-calendar-day"></i>
+					<text class="date-text">{{ shortDate }}</text>
+				</view>
+			</picker>
 			<view class="search-btn" @tap="doSearch">查询</view>
 		</view>
 
@@ -357,6 +371,17 @@
 			}
 		},
 		computed: {
+			// 日期可选范围：数据只覆盖近段时间，故限制在近几天到未来几天
+			dateStart() { return addDays(formatToday(), -7) },
+			dateEnd() { return addDays(formatToday(), 7) },
+			// 搜索框里显示的简短日期：今年省略年份，显示"8月17日"
+			shortDate() {
+				const d = this.date || ''
+				const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d)
+				if (!m) return d || '选择日期'
+				const nowYear = String(new Date().getFullYear())
+				return m[1] === nowYear ? `${+m[2]}月${+m[3]}日` : `${m[1]}-${m[2]}-${m[3]}`
+			},
 			// 供 slide-tabs 使用：key 对应插槽名，label 为显示文字
 			tabs() {
 				return [
@@ -475,6 +500,12 @@
 			isCurrentStop(stop) {
 				if (!this.locate || !this.locate.station) return false
 				return stop.station_name === this.locate.station
+			},
+			onDateChange(e) {
+				const val = typeof e.detail.value === 'object' ? e.detail.value.value : e.detail.value
+				if (!val || val === this.date) return
+				this.date = val
+				if (this.trainNo) this.setTrain(this.trainNo)
 			},
 			doSearch() {
 				const no = String(this.searchText || '').trim().toUpperCase()
@@ -636,6 +667,14 @@
 		}
 	}
 
+	function addDays(str, n) {
+		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str || ''))
+		if (!m) return str
+		const d = new Date(+m[1], +m[2] - 1, +m[3])
+		d.setDate(d.getDate() + n)
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	}
+
 	function formatToday() {
 		const d = new Date()
 		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -682,6 +721,21 @@
 		font-weight: 600;
 		border-radius: 10px;
 		padding: 8px 16px;
+	}
+	/* 日期选择按钮：日历图标 + 月日 */
+	.date-btn {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 0 6px;
+		i { font-size: 15px; color: var(--theme-text); }
+	}
+	.date-text {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--theme-text);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ===== 车次标题 ===== */

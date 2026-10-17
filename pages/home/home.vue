@@ -12,6 +12,13 @@
 				@confirm="doSearch"
 			/>
 			<text class="search-cancel" v-if="searchText" @click="searchText = ''">✕</text>
+			<!-- 日期选择：搜索时带上的日期，进入二级页后也会沿用 -->
+			<picker mode="date" :value="date" :start="dateStart" :end="dateEnd" @change="onDateChange">
+				<view class="date-btn">
+					<i class="fas fa-calendar-day"></i>
+					<text class="date-text">{{ shortDate }}</text>
+				</view>
+			</picker>
 			<view class="search-btn" @click="doSearch">搜索</view>
 		</view>
 		<view class="quick-trains" v-if="recentTrains.length">
@@ -100,15 +107,39 @@
 <script>
 	import { FEATURES, SECTIONS, getFeature } from '@/common/features.js'
 
+	function addDays(str, n) {
+		const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(str || ''))
+		if (!m) return str
+		const d = new Date(+m[1], +m[2] - 1, +m[3])
+		d.setDate(d.getDate() + n)
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	}
+
+	function formatToday() {
+		const d = new Date()
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+	}
+
 	export default {
 		data() {
 			return {
 				sections: SECTIONS,
 				allFeatures: FEATURES,
-				searchText: ''
+				searchText: '',
+				date: formatToday()
 			}
 		},
 		computed: {
+			// 日期可选范围：数据只覆盖近段时间
+			dateStart() { return addDays(formatToday(), -7) },
+			dateEnd() { return addDays(formatToday(), 7) },
+			// 搜索框里显示的简短日期
+			shortDate() {
+				const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(this.date || '')
+				if (!m) return this.date || '选择日期'
+				return m[1] === String(new Date().getFullYear())
+					? `${+m[2]}月${+m[3]}日` : `${m[1]}-${m[2]}-${m[3]}`
+			},
 			homeLayout() { return this.$store.state.settings.homeLayout },
 			customCards() { return this.$store.state.settings.customCards },
 			// 最近查询过的车次（来自 Vuex 搜索历史）
@@ -137,10 +168,16 @@
 				}
 				this.goTrainDetail(no)
 			},
+			onDateChange(e) {
+				const val = typeof e.detail.value === 'object' ? e.detail.value.value : e.detail.value
+				if (val) this.date = val
+			},
 			goTrainDetail(trainNo) {
 				if (!trainNo) return
 				this.$store.commit('addSearchHistory', { train: trainNo, time: Date.now() })
-				uni.navigateTo({ url: `/pages/train-detail/train-detail?train=${encodeURIComponent(trainNo)}` })
+				uni.navigateTo({
+					url: `/pages/train-detail/train-detail?train=${encodeURIComponent(trainNo)}&date=${this.date}`
+				})
 			},
 			customCardStyle(card) {
 				if (card.bgImage) {
@@ -196,6 +233,21 @@
 	.search-input { flex: 1; font-size: 17px; color: var(--label); height: 38px; }
 	.search-placeholder { color: var(--secondary); }
 	.search-cancel { font-size: 15px; color: var(--secondary); padding: 0 6px; }
+	/* 日期选择按钮：日历图标 + 月日 */
+	.date-btn {
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 0 6px;
+		i { font-size: 15px; color: var(--theme-text); }
+	}
+	.date-text {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--theme-text);
+		font-variant-numeric: tabular-nums;
+	}
 	.search-btn {
 		flex-shrink: 0;
 		background: var(--theme);

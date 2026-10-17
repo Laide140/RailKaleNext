@@ -340,6 +340,60 @@ export function formatSaleTime(t) {
 	return s.slice(0, 2) + ':' + s.slice(2)
 }
 
+
+/**
+ * 按日期查询车次担当车组 —— 自有数据源
+ * GET /getTrainInfo/?train={车次}&date={YYYYMMDD}
+ *
+ * 与 getTrainData 的区别：本端点支持日期，同一车次在不同日期的担当
+ * 车组可能不同（例：G1 在 20261016 为 CR400BF-A-5057，20261017 为
+ * CR400BF-A-5059）。getTrainData 不接受 date，只返回当前记录。
+ *
+ * 注意：日期格式必须是 8 位 YYYYMMDD；服务端数据只覆盖近期，
+ * 超出范围的日期会回退到最近可用日期（见返回的 metadata.date_used）。
+ *
+ * @param {string} train 车次号
+ * @param {string} [date] 日期，'YYYY-MM-DD' 或 'YYYYMMDD'
+ * @returns {Promise<{trainSet: string, date: string, dateUsed: string}>}
+ */
+export function getTrainInfoByDate(train, date) {
+	const day = String(date || '').replace(/-/g, '')
+	let url = NEXT_BASE + '/getTrainInfo/?train=' + encodeURIComponent(train)
+	if (/^\d{8}$/.test(day)) url += '&date=' + day
+	return new Promise((resolve) => {
+		uni.request({
+			url,
+			responseType: 'text',
+			timeout: 15000,
+			success: (r) => {
+				try {
+					const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					if (!res || !res.success || !res.data) return resolve(null)
+					resolve({
+						trainSet: res.data.carGroup || '',
+						date: res.data.date || '',
+						dateUsed: (res.metadata && res.metadata.date_used) || res.data.date || ''
+					})
+				} catch (e) {
+					resolve(null)
+				}
+			},
+			fail: () => resolve(null)
+		})
+	})
+}
+
+/** 'YYYY-MM-DD' → 'YYYYMMDD' */
+export function compactDate(d) {
+	return String(d || '').replace(/-/g, '')
+}
+
+/** 今天，'YYYY-MM-DD' */
+export function todayStr() {
+	const d = new Date()
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /**
  * 车组运用数据（车次 ↔ 车组号 担当关系）— 自有数据源
  * GET /getTrainData/?train={车次或车组号}
@@ -579,8 +633,10 @@ export async function getTrainDetail(train, date, onPartial) {
 			if (v) emit({ locate: v })
 			return v
 		}),
-		getTrainData('train', trainNo).then(r => {
-			const v = (r.single && r.single.trainSet) || (r.list[0] && r.list[0].trainSet) || ''
+		// 担当车组按日期查询：getTrainData 不支持 date，
+		// 同一车次不同日期的车组可能不同，必须走 getTrainInfo
+		getTrainInfoByDate(trainNo, day).then(r => {
+			const v = (r && r.trainSet) || ''
 			if (v) emit({ trainSet: v })
 			return v
 		})
@@ -707,6 +763,9 @@ export default {
 	isRenamedStation,
 	bureauShortName,
 	getTrainData,
+	getTrainInfoByDate,
+	compactDate,
+	todayStr,
 	getTrainSetOfTrain,
 	getTrainsOfTrainSet,
 	getTrainDetail,
