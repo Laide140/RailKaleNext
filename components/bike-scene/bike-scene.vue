@@ -178,7 +178,8 @@
 	.wing {
 		fill: var(--theme-text);
 		opacity: 0.55;
-		transform-origin: 118px 60px;
+		transform-box: fill-box;
+		transform-origin: 30% 60%;
 		animation: wing-flap 0.55s ease-in-out infinite alternate;
 	}
 	.tail { fill: var(--theme-text); opacity: 0.75; }
@@ -187,12 +188,14 @@
 		stroke-width: 3;
 		stroke-linecap: round;
 		fill: none;
-		transform-origin: 116px 78px;
+		transform-box: fill-box;
+		transform-origin: 0% 0%;
 		animation: leg-pump 0.6s ease-in-out infinite alternate;
 	}
 	.foot {
 		fill: var(--theme-text);
-		transform-origin: 116px 78px;
+		transform-box: fill-box;
+		transform-origin: 0% 0%;
 		animation: leg-pump 0.6s ease-in-out infinite alternate;
 	}
 	.arm {
@@ -203,16 +206,23 @@
 	}
 
 	/* ===== 动画 ===== */
-	/* 轮子滚动 */
+	/* 轮子滚动
+	 *
+	 * 用 fill-box + 50% 50%：以「元素自身包围盒的中心」为旋转中心。
+	 * 轮子是一组同心圆，包围盒中心就是圆心，这样不依赖 SVG 用户坐标系，
+	 * 各浏览器表现一致。
+	 *
+	 * 之前用 view-box + 88px/112px 会绕到错误的点，轮子会位移飞出；
+	 * 而 fill-box 配用户坐标又会双重解释原点，同样错位。
+	 */
 	.wheel {
 		transform-box: fill-box;
+		transform-origin: 50% 50%;
 	}
 	.wheel-rear {
-		transform-origin: 88px 112px;
 		animation: spin 0.9s linear infinite;
 	}
 	.wheel-front {
-		transform-origin: 168px 112px;
 		animation: spin 0.9s linear infinite;
 	}
 	@keyframes spin {
@@ -222,7 +232,8 @@
 
 	/* 整体轻微上下颠动 */
 	.rig {
-		transform-origin: 128px 112px;
+		transform-box: fill-box;
+		transform-origin: 50% 100%;
 		animation: bob 0.9s ease-in-out infinite;
 	}
 	@keyframes bob {
