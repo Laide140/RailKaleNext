@@ -67,6 +67,8 @@
 					</view>
 					<view class="stop-body">
 						<view class="stop-head">
+							<!-- 跨天车才标注天：发>到 说明这一站跨了日，标「昨天」/「明天」 -->
+							<text class="stop-day" v-if="dayTagOf(index)">{{ dayTagOf(index) }}</text>
 							<text class="stop-name">{{ stop.station_name }}</text>
 							<text class="stop-badge" v-if="isCurrentStop(stop)">当前</text>
 							<!-- 每站右侧显示停靠站台 -->
@@ -320,6 +322,7 @@
 		</view>
 		<app-toast ref="toast" />
 		<app-date-picker ref="datePick" />
+		<app-action-sheet ref="sheet" />
 	</view>
 </template>
 
@@ -376,20 +379,71 @@
 				return m[1] === nowYear ? `${+m[2]}月${+m[3]}日` : `${m[1]}-${m[2]}-${m[3]}`
 			},
 			// 供 slide-tabs 使用：key 对应插槽名，label 为显示文字
+			// 过去车次没有实时运行数据，故不显示「运行」Tab
 			tabs() {
-				return [
-					{ key: 'time', label: '时刻' },
-					{ key: 'run', label: '运行' },
-					{ key: 'train', label: '列车' }
-				]
+				const list = [{ key: 'time', label: '时刻' }]
+				if (!this.isPast) list.push({ key: 'run', label: '运行' })
+				list.push({ key: 'train', label: '列车' })
+				return list
+			},
+			/**
+			 * 是否为「过去的车次」：过去车次不显示运行状态，也不显示「运行」Tab。
+			 *
+			 * 判断依据是查询日期 + 时刻表，不能只看日期：
+			 * 跨天车的始发时间晚于终到时间（如 23:50 发、次日 07:10 到），
+			 * 其「昨天」那趟此刻可能仍在跑，因此查昨天或今天都不算过去。
+			 * 非跨天车查昨天即为过去。
+			 */
+			isPast() {
+				const day = this.date || ''
+				if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false
+				const today = formatToday()
+				if (day > today) return false          // 未来车次，不算过去
+				if (day === today) return false        // 今天，可能是跨天车本趟
+				// day < today：昨天及更早。跨天车只有「昨天」这趟可能还在运行
+				if (!this.isOvernight) return true
+				const yesterday = addDays(today, -1)
+				return day < yesterday
+			},
+			/**
+			 * 沿途各站相对查询日的天偏移。
+			 * 以始发站为第 0 天（即用户查询的那天），
+			 * 之后逐站比较出发与到达时间：发 > 到 说明跨过了一个零点，
+			 * 偏移 +1；跨天车跨零点后时间会变早，再比较即回到「跨天」状态。
+			 * 只对跨天车有意义，非跨天车返回空数组。
+			 */
+			dayOffsets() {
+				if (!this.isOvernight) return []
+				const list = this.stops
+				const out = []
+				let day = 0
+				for (let i = 0; i < list.length; i++) {
+					const prev = list[i - 1]
+					if (prev) {
+						const d = toMinutes(prev.depart_time)
+						const a = toMinutes(list[i].arrive_time)
+						// 发 > 到：上一站出发后跨了零点
+						if (d !== null && a !== null && d > a) day += 1
+					}
+					out.push(day)
+				}
+				return out
+			},
+			// 跨天车：始发时间晚于终到时间
+			isOvernight() {
+				const dep = toMinutes(this.departTime)
+				const arr = toMinutes(this.arriveTime)
+				if (dep === null || arr === null) return false
+				return dep > arr
 			},
 			stops() { return (this.timetable && this.timetable.stops) || [] },
 			origin() { return (this.timetable && this.timetable.origin) || '' },
 			destination() { return (this.timetable && this.timetable.destination) || '' },
 			departTime() { return (this.timetable && this.timetable.depart_time) || '' },
 			arriveTime() { return (this.timetable && this.timetable.arrive_time) || '' },
-			isRunning() { return !!(this.locate && this.locate.status === 'running') },
+			isRunning() { return !this.isPast && !!(this.locate && this.locate.status === 'running') },
 			statusText() {
+				if (this.isPast) return ''            // 过去车次不显示运行状态
 				if (!this.locate) return ''
 				if (this.locate.status === 'running') return '运行中'
 				if (this.locate.status === 'arrived') return '已到达'
@@ -462,6 +516,14 @@
 					`&location=${p.lng},${p.lat}&zoom=16`
 			}
 		},
+		watch: {
+			// Tab 数量会随「是否过去车次」变化，越界时回到最后一个
+			tabs(list) {
+				if (this.activeTabIndex > list.length - 1) {
+					this.activeTabIndex = list.length - 1
+				}
+			}
+		},
 		onLoad(options) {
 			const train = options && options.train ? decodeURIComponent(options.train) : ''
 			this.date = options && options.date ? options.date : formatToday()
@@ -481,6 +543,39 @@
 				return cateringImageUrl(pictureUrl)
 			},
 
+			/**
+			 * 跨天车次查询后弹框确认发车日。
+			 * 跨天车（始发晚于终到）在查询日次日才到站，
+			 * 「昨天发车」那趟此刻可能仍在跑，必须让用户明确选一班。
+			 * 只在本次查询尚未确认过、且用户没有主动改日期时弹一次。
+			 */
+			async askDepartDate(tt) {
+				if (!tt) return
+				const dep = toMinutes(tt.depart_time)
+				const arr = toMinutes(tt.arrive_time)
+				if (dep === null || arr === null || dep <= arr) return   // 非跨天车
+				if (this._departAsked === this.trainNo + this.date) return // 已确认过
+
+				const base = this.date || formatToday()
+				const y = addDays(base, -1)
+				const idx = await this.sheet({
+					title: `${this.trainNo} 是跨天车次，请选择发车日`,
+					itemList: [`${y} 发车`, `${base} 发车`],
+					cancelText: '取消'
+				})
+				if (idx < 0) return
+				const picked = idx === 0 ? y : base
+				this._departAsked = this.trainNo + picked
+				if (picked === this.date) return
+				this.date = picked
+				this.setTrain(this.trainNo)
+			},
+			// 站点天标记：只标注「昨天」「明天」，即为查询当天的站点不标注
+			dayTagOf(index) {
+				const off = this.dayOffsets[index]
+				if (off === undefined || off === 0) return ''
+				return off < 0 ? '昨天' : '明天'
+			},
 			platformOf(stop) {
 				const p = this.platformMap[stop.station_name]
 				return (p && p.platform) || ''
@@ -541,6 +636,8 @@
 					if (patch.timetable) {
 						this.timetable = patch.timetable
 						this.loading = false                   // 有时刻表即可渲染首屏
+						// 跨天车次：同一车次号每天发一班，需先确认用户要哪一天发的
+						this.askDepartDate(patch.timetable)
 					}
 					if (patch.line) this.lineData = patch.line
 					if (patch.locate) {
@@ -663,6 +760,12 @@
 				}
 			}
 		}
+	}
+
+	// 'HH:MM' → 当天分钟数；无法解析返回 null
+	function toMinutes(t) {
+		const m = /^(\d{1,2}):(\d{2})/.exec(String(t || ''))
+		return m ? Number(m[1]) * 60 + Number(m[2]) : null
 	}
 
 	function addDays(str, n) {
@@ -825,6 +928,13 @@
 
 	.stop-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 	.stop-name { font-size: 17px; font-weight: 600; color: var(--label); }
+	/* 跨天车在跨过零点的站点前标注「昨天」/「明天」 */
+	.stop-day {
+		font-size: 10px; font-weight: 600;
+		color: var(--theme-text);
+		background: var(--theme-soft);
+		border-radius: 5px; padding: 1px 6px;
+	}
 	.stop-badge {
 		font-size: 10px; font-weight: 600; color: #fff;
 		background: var(--theme); border-radius: 5px; padding: 1px 6px;

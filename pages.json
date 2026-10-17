@@ -162,6 +162,12 @@
             }
         },
         {
+            "path": "pages/travel-ticket/travel-ticket",
+            "style": {
+                "navigationBarTitleText": "行程车票"
+            }
+        },
+        {
             "path": "pages/mine/mine",
             "style": {
                 "navigationBarTitleText": "我的",

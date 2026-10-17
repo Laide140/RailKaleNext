@@ -1,5 +1,11 @@
 <template>
 	<view class="page" :style="themeStyle">
+		<!-- 从行程进入时提示正在为哪条行程记录 -->
+		<view class="travel-hint" v-if="travelId">
+			<i class="fas fa-location-crosshairs"></i>
+			<text>为行程 {{ travelTrain }} 记录测速轨迹 · 已存 {{ savedPoints }} 点</text>
+		</view>
+
 		<!-- 高德地图 + canvas 叠加层 -->
 		<view class="map-card">
 			<view class="map-wrap">
@@ -77,12 +83,17 @@
 
 <script>
 	import { getKey } from '@/common/keys.js'
+	import { getTravel, addGpsPoint } from '@/common/travel.js'
 
 	export default {
 		data() {
 			return {
 				recording: false,
 				error: false,
+				// 从运转分享进入时带上行程 id，测速点会写进该行程
+				travelId: '',
+				travelTrain: '',
+				savedPoints: 0,
 				statusText: '点击开始进行定位测速',
 				mapReady: false,
 				hasFix: false,
@@ -114,6 +125,13 @@
 				_drawTimer: null,
 				_frame: 0,
 			}
+		},
+		onLoad(options) {
+			if (!options || !options.travelId) return
+			this.travelId = decodeURIComponent(options.travelId)
+			this.travelTrain = options.train ? decodeURIComponent(options.train) : ''
+			const t = getTravel(this.travelId)
+			this.savedPoints = (t && t.gps) ? Object.keys(t.gps).length : 0
 		},
 		computed: {
 			// 实时速度 = 总路程 ÷ 测试总时长（km/h）
@@ -549,6 +567,11 @@
 				}
 				this.lastFix = { lng, lat, t }
 				this.points.push({ lng, lat, t })
+				// 属于某条行程时同步落盘，退出后不会丢
+				if (this.travelId) {
+					const n = addGpsPoint(this.travelId, lng, lat)
+					if (n) this.savedPoints = n
+				}
 
 				// 每次当前速度变化时，若当前速度大于最高速度则更新最高速度
 				// 前 3 秒不计算最高速度（避免定位初始噪声）
@@ -693,6 +716,16 @@
 	}
 
 	/* ===== Map Card ===== */
+	.travel-hint {
+		display: flex; align-items: center; gap: 8px;
+		background: var(--theme-soft);
+		border-radius: 12px;
+		padding: 10px 14px;
+		margin-bottom: 12px;
+		i { font-size: 14px; color: var(--theme-text); }
+		text { font-size: 13px; color: var(--theme-text); font-weight: 600; }
+	}
+
 	.map-card {
 		background: #fff;
 		border-radius: 14px;

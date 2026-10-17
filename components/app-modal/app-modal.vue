@@ -5,6 +5,8 @@
 			<text class="am-title" v-if="title">{{ title }}</text>
 			<!-- 正文 -->
 			<text class="am-content" v-if="content">{{ content }}</text>
+			<!-- 小字补充说明（如隐私声明） -->
+			<text class="am-hint" v-if="hint">{{ hint }}</text>
 			<!-- 输入框（对应 showModal 的 editable） -->
 			<input
 				v-if="editable"
@@ -64,6 +66,7 @@
 				showCancel: true,
 				editable: false,
 				placeholderText: '',
+				hint: '',
 				actionsColumnValue: this.actionsColumn,
 				inputValue: '',
 				_resolve: null
@@ -92,6 +95,7 @@
 				this.showCancel = o.showCancel !== false
 				this.editable = !!o.editable
 				this.placeholderText = o.placeholderText || ''
+				this.hint = o.hint || ''
 				this.actionsColumnValue = o.actionsColumn === undefined ? true : !!o.actionsColumn
 				this.inputValue = o.editable ? (o.content || '') : ''
 				this.visible = true
@@ -159,6 +163,13 @@
 		margin-top: 8px;
 		white-space: pre-wrap;
 		word-break: break-word;
+	}
+	.am-hint {
+		font-size: 11px;
+		color: var(--secondary, #8e8e93);
+		text-align: center;
+		line-height: 1.45;
+		margin-top: 8px;
 	}
 	.am-input {
 		width: 100%;
