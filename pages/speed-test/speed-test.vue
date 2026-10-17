@@ -4,7 +4,6 @@
 		<view class="map-card">
 			<view class="map-wrap">
 				<view id="amapContainer" class="map-container"></view>
-				<canvas class="map-canvas" canvas-id="trackCanvas" id="trackCanvas"></canvas>
 			</view>
 			<view class="map-legend">
 				<view class="legend-item">
@@ -78,25 +77,6 @@
 
 <script>
 	import { getKey } from '@/common/keys.js'
-
-	/**
-	 * 取真正的原生 canvas 元素
-	 *
-	 * uni-app H5 下 <canvas canvas-id="x"> 会被渲染为
-	 *   <uni-canvas canvas-id="x"><canvas></canvas></uni-canvas>
-	 * 外层没有 getContext()，必须向内查找；
-	 * 同时兼容直接拿到原生 canvas 的情况（App/小程序差异）。
-	 */
-	function resolveNativeCanvas() {
-		const host = document.getElementById('trackCanvas')
-		if (!host) return null
-		// 本身已是原生 canvas
-		if (typeof host.getContext === 'function') return host
-		// uni-canvas 外壳：取内部的 canvas
-		const inner = host.querySelector && host.querySelector('canvas')
-		if (inner && typeof inner.getContext === 'function') return inner
-		return null
-	}
 
 	export default {
 		data() {
@@ -219,16 +199,25 @@
 				})
 			},
 
-			// 在地图容器上方叠加透明 canvas（H5 原生 2D 上下文自绘路径与小圆点，稳定可靠）
+			// 在地图容器上方叠加一层自建的原生 canvas
+			//
+			// 不要用 <canvas canvas-id> 组件：uni-app 会把它渲染成
+			// <uni-canvas> 外壳，内部的 canvas 由组件自身管理，
+			// 直接 getContext('2d') 绘制的内容不会保留（实测写入后读不到像素）。
+			// 这里仿照路网地图的做法，自己 createElement 并 append，
+			// 完全掌控上下文。
 			setupOverlayCanvas() {
 				const el = document.getElementById('amapContainer')
 				if (!el) return
 
-				// 注意：uni-app 把 <canvas> 包成了 <uni-canvas>，
-				// getElementById 拿到的是外壳元素，它没有 getContext()。
-				// 真正的 2D 上下文要从内部的原生 <canvas> 取。
-				const cv = resolveNativeCanvas()
-				if (!cv) return
+				if (this._canvasEl && this._canvasEl.parentNode) {
+					this._canvasEl.parentNode.removeChild(this._canvasEl)
+				}
+				const cv = document.createElement('canvas')
+				cv.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:10'
+				cv.className = 'map-canvas'
+				el.appendChild(cv)
+
 				this._canvasEl = cv
 				this._g = cv.getContext('2d')
 				if (!this._g) return
@@ -272,7 +261,7 @@
 			 */
 			_sizeCanvas() {
 				const el = document.getElementById('amapContainer')
-				const cv = this._canvasEl || resolveNativeCanvas()
+				const cv = this._canvasEl
 				if (!el || !cv) return
 				this._canvasEl = cv
 				const rect = el.getBoundingClientRect()
@@ -723,15 +712,6 @@
 		width: 100%;
 		height: 100%;
 		z-index: 1;
-	}
-	.map-canvas {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		z-index: 2;
-		pointer-events: none;
 	}
 	.map-legend {
 		display: flex;
