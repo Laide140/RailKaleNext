@@ -10,7 +10,6 @@
 		<view class="status-card">
 			<i class="fas fa-screwdriver-wrench status-icon"></i>
 			<text class="status-text">功能开发中...敬请期待</text>
-			<text class="status-sub">数据统计与可视化看板，正在建设中</text>
 		</view>
 
 		<bike-scene></bike-scene>
@@ -80,11 +79,5 @@
 		font-weight: 600;
 		color: var(--label);
 		text-align: center;
-	}
-	.status-sub {
-		font-size: 13px;
-		color: var(--secondary);
-		text-align: center;
-		line-height: 1.6;
 	}
 </style>
