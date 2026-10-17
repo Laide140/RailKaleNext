@@ -57,6 +57,7 @@
 		<view class="empty-state" v-if="!loading && stops.length === 0">
 			<text>请输入车次号查询时刻表</text>
 		</view>
+		<app-toast ref="toast" />
 	</view>
 </template>
 
@@ -90,7 +91,7 @@
 		methods: {
 			async fetchTimetable() {
 				if (!this.train.trim()) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				this.loading = true
@@ -102,11 +103,11 @@
 						uni.setNavigationBarTitle({ title: `${this.train}次列车时刻表` })
 					} else {
 						this.stops = []
-						uni.showToast({ title: res.msg || '查询失败', icon: 'none' })
+						this.toast(res.msg || '查询失败')
 					}
 				} catch (err) {
 					this.stops = []
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}

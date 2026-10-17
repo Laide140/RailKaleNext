@@ -50,6 +50,7 @@
 			<text>{{ searched.query ? '未查询到记录' : '输入车次或车组号开始查询' }}</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -111,7 +112,7 @@
 			async search() {
 				const q = String(this.query || '').trim()
 				if (!q) {
-					uni.showToast({ title: '请输入查询内容', icon: 'none' })
+					this.toast('请输入查询内容')
 					return
 				}
 				// 记录本次查询的类型与关键词，结果区据此渲染

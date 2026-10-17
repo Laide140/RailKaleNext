@@ -12,20 +12,11 @@
 				@confirm="doSearch"
 			/>
 			<text class="search-cancel" v-if="searchText" @tap="searchText = ''">✕</text>
-			<!-- 日期选择：点击弹出系统日历，改日期后按新日期重查 -->
-			<picker
-				ref="datePicker"
-				mode="date"
-				:value="date"
-				:start="dateStart"
-				:end="dateEnd"
-				@change="onDateChange"
-			>
-				<view class="date-btn">
-					<i class="fas fa-calendar-day"></i>
-					<text class="date-text">{{ shortDate }}</text>
-				</view>
-			</picker>
+			<!-- 日期选择：点击弹出日历，改日期后按新日期重查 -->
+			<view class="date-btn" @tap="pickDate">
+				<i class="fas fa-calendar-day"></i>
+				<text class="date-text">{{ shortDate }}</text>
+			</view>
 			<view class="search-btn" @tap="doSearch">查询</view>
 		</view>
 
@@ -327,6 +318,8 @@
 			<i class="fas fa-train empty-icon"></i>
 			<text>输入车次号，查看时刻、运行与担当信息</text>
 		</view>
+		<app-toast ref="toast" />
+		<app-date-picker ref="datePick" />
 	</view>
 </template>
 
@@ -501,16 +494,21 @@
 				if (!this.locate || !this.locate.station) return false
 				return stop.station_name === this.locate.station
 			},
-			onDateChange(e) {
-				const val = typeof e.detail.value === 'object' ? e.detail.value.value : e.detail.value
-				if (!val || val === this.date) return
-				this.date = val
+			async pickDate() {
+				const v = await this.datePick({
+					value: this.date,
+					start: this.dateStart,
+					end: this.dateEnd,
+					title: '乘车日期'
+				})
+				if (!v || v === this.date) return
+				this.date = v
 				if (this.trainNo) this.setTrain(this.trainNo)
 			},
 			doSearch() {
 				const no = String(this.searchText || '').trim().toUpperCase()
 				if (!no) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				this.setTrain(no)
@@ -564,11 +562,11 @@
 					this.trainSet = res.trainSet || this.trainSet
 					this.trainSetTrains = res.trainSetTrains || []
 					if (!res.timetable && !res.line && !res.locate) {
-						uni.showToast({ title: '未查询到该车次', icon: 'none' })
+						this.toast('未查询到该车次')
 					}
 					if (this.isRunning) this.startPolling()
 				} catch (e) {
-					uni.showToast({ title: '网络异常，请稍后重试', icon: 'none' })
+					this.toast('网络异常，请稍后重试')
 				} finally {
 					this.loading = false
 				}

@@ -79,6 +79,9 @@
 			<button class="save-btn" @tap="save">保存布局</button>
 		</view>
 	</view>
+		<app-toast ref="toast" />
+		<app-modal ref="modal" />
+		<app-action-sheet ref="sheet" />
 </template>
 
 <script>
@@ -130,26 +133,22 @@
 					features: []
 				})
 			},
-			deleteCard(ci) {
-				uni.showModal({
+			async deleteCard(ci) {
+				const res = await this.dialog({
 					title: '删除卡片',
-					content: `确定删除「${this.cards[ci].title || '未命名'}」吗？`,
-					success: (res) => {
-						if (res.confirm) this.cards.splice(ci, 1)
-					}
+					content: `确定删除「${this.cards[ci].title || '未命名'}」吗？`
 				})
+				if (res.confirm) this.cards.splice(ci, 1)
 			},
-			renameCard(ci) {
+			async renameCard(ci) {
 				const card = this.cards[ci]
-				uni.showModal({
+				const res = await this.dialog({
 					title: '重命名卡片',
 					editable: true,
 					placeholderText: '卡片名称',
-					content: card.title,
-					success: (res) => {
-						if (res.confirm && res.content) card.title = res.content
-					}
+					content: card.title
 				})
+				if (res.confirm && res.content) card.title = res.content
 			},
 			pickBg(ci) {
 				const self = this
@@ -233,32 +232,31 @@
 				const card = this.cards[ci]
 				if (!card) return
 				if (card.features.includes(f.id)) {
-					uni.showToast({ title: '该功能已存在', icon: 'none' })
+					this.toast('该功能已存在')
 					return
 				}
 				card.features.push(f.id)
-				uni.showToast({ title: `已添加到「${card.title || '卡片'}」`, icon: 'none' })
+				this.toast(`已添加到「${card.title || '卡片'}」`)
 			},
 			// 兜底：点按添加
-			tapAddFeature(f) {
+			async tapAddFeature(f) {
 				if (this.dragging) return
 				if (!this.cards.length) {
-					uni.showToast({ title: '请先添加卡片', icon: 'none' })
+					this.toast('请先添加卡片')
 					return
 				}
-				const self = this
 				const items = this.cards.map((c, i) => ({ text: `${c.title || '卡片'}（${c.features.length}项）`, index: i }))
-				uni.showActionSheet({
-					itemList: items.map(i => i.text),
-					success: (res) => {
-						const card = self.cards[items[res.tapIndex].index]
-						if (card.features.includes(f.id)) {
-							uni.showToast({ title: '该功能已存在', icon: 'none' })
-							return
-						}
-						card.features.push(f.id)
-					}
+				const idx = await this.sheet({
+					title: '添加到卡片',
+					itemList: items.map(i => i.text)
 				})
+				if (idx < 0) return
+				const card = this.cards[items[idx].index]
+				if (card.features.includes(f.id)) {
+					this.toast('该功能已存在')
+					return
+				}
+				card.features.push(f.id)
 			},
 			save() {
 				const clean = this.cards.map(c => ({
@@ -270,7 +268,7 @@
 				}))
 				this.$store.commit('setSettings', { customCards: clean })
 				this.$store.commit('setSettings', { homeLayout: 'custom' })
-				uni.showToast({ title: '布局已保存', icon: 'success' })
+				this.toast('布局已保存', 'success')
 				setTimeout(() => uni.navigateBack(), 500)
 			}
 		}

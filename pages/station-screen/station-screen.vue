@@ -39,6 +39,7 @@
 			<text>输入车站名称查询大屏信息</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -68,7 +69,7 @@
 			},
 			async fetchScreen() {
 				if (!this.stationCode.trim()) {
-					uni.showToast({ title: '请输入车站', icon: 'none' })
+					this.toast('请输入车站')
 					return
 				}
 				this.loading = true
@@ -82,11 +83,11 @@
 						}
 					} else {
 						this.list = []
-						uni.showToast({ title: res.msg || '查询失败', icon: 'none' })
+						this.toast(res.msg || '查询失败')
 					}
 				} catch (err) {
 					this.list = []
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}

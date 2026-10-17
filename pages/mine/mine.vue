@@ -43,6 +43,7 @@
 			</view>
 		</view>
 	</view>
+		<app-modal ref="modal" />
 </template>
 
 <script>
@@ -58,7 +59,7 @@
 		methods: {
 			goToPage(path) { uni.navigateTo({ url: `/pages/${path}/${path}` }) },
 			showAbout() {
-				uni.showModal({
+				this.dialog({
 					title: '关于 RailKale: Next',
 					content: `铁路万花筒（RailKale: Next） v${version}\n\n综合铁路信息查询工具\n\n数据接口：全自有数据源（next.laide.net.cn）\n\n仅供个人学习参考使用`,
 					showCancel: false,

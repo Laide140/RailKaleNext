@@ -62,6 +62,7 @@
 			</view>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -108,7 +109,7 @@
 			async search() {
 				const val = this.station.trim()
 				if (!val) {
-					uni.showToast({ title: '请输入车站名', icon: 'none' })
+					this.toast('请输入车站名')
 					return
 				}
 				this.loading = true
@@ -128,11 +129,11 @@
 						}
 						this.buildLayoutImg(stationName, val)
 					} else {
-						uni.showToast({ title: '未找到该车站', icon: 'none' })
+						this.toast('未找到该车站')
 					}
 				} catch (err) {
 					console.error('站台规模查询失败', err)
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}

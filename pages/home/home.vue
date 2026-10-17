@@ -13,12 +13,10 @@
 			/>
 			<text class="search-cancel" v-if="searchText" @click="searchText = ''">✕</text>
 			<!-- 日期选择：搜索时带上的日期，进入二级页后也会沿用 -->
-			<picker mode="date" :value="date" :start="dateStart" :end="dateEnd" @change="onDateChange">
-				<view class="date-btn">
-					<i class="fas fa-calendar-day"></i>
-					<text class="date-text">{{ shortDate }}</text>
-				</view>
-			</picker>
+			<view class="date-btn" @tap="pickDate">
+				<i class="fas fa-calendar-day"></i>
+				<text class="date-text">{{ shortDate }}</text>
+			</view>
 			<view class="search-btn" @click="doSearch">搜索</view>
 		</view>
 		<view class="quick-trains" v-if="recentTrains.length">
@@ -101,6 +99,8 @@
 			<image class="footer-logo" src="https://next.laide.net.cn/d7a80102a3f4bfad07fcab4685262dac.png" mode="aspectFit"></image>
 			<text>铁路万花筒 · RailKale: Next</text>
 		</view>
+		<app-toast ref="toast" />
+		<app-date-picker ref="datePick" />
 	</view>
 </template>
 
@@ -163,14 +163,19 @@
 			doSearch() {
 				const no = String(this.searchText || '').trim().toUpperCase()
 				if (!no) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				this.goTrainDetail(no)
 			},
-			onDateChange(e) {
-				const val = typeof e.detail.value === 'object' ? e.detail.value.value : e.detail.value
-				if (val) this.date = val
+			async pickDate() {
+				const v = await this.datePick({
+					value: this.date,
+					start: this.dateStart,
+					end: this.dateEnd,
+					title: '乘车日期'
+				})
+				if (v) this.date = v
 			},
 			goTrainDetail(trainNo) {
 				if (!trainNo) return

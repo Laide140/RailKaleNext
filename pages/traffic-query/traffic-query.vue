@@ -37,6 +37,7 @@
 			<text class="empty-text">输入车站名称查询交通接驳信息</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -83,7 +84,7 @@
 
 			async search() {
 				var s = this.station.trim()
-				if (!s) { uni.showToast({ title: '请输入车站名称', icon: 'none' }); return }
+				if (!s) { this.toast('请输入车站名称'); return }
 				this.loading = true; this.error = ''; this.result = null; this.activeTab = 0
 				try {
 					var code = await this.findCode(s)

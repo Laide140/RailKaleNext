@@ -18,9 +18,7 @@
 			<view class="form-row date-row">
 				<view class="form-item date-item">
 					<text class="form-label">日期</text>
-					<picker mode="date" :value="date" @change="onDateChange">
-						<view class="date-picker">{{ date }}</view>
-					</picker>
+					<view class="date-picker" @tap="pickDate">{{ date }}</view>
 				</view>
 				<button class="search-btn" @tap="searchTrains" :loading="loading">查 询</button>
 			</view>
@@ -87,6 +85,8 @@
 				查询耗时: {{ result.elapsed }}
 			</view>
 		</view>
+		<app-toast ref="toast" />
+		<app-date-picker ref="datePick" />
 	</view>
 </template>
 
@@ -133,8 +133,9 @@
 				this.from = this.to
 				this.to = tmp
 			},
-			onDateChange(e) {
-				this.date = e.detail.value
+			async pickDate() {
+				const v = await this.datePick({ value: this.date, title: '乘车日期' })
+				if (v) this.date = v
 			},
 			fillStation(name) {
 				if (!this.from) {
@@ -148,11 +149,11 @@
 			},
 			async searchTrains() {
 				if (!this.from.trim()) {
-					uni.showToast({ title: '请输入出发站', icon: 'none' })
+					this.toast('请输入出发站')
 					return
 				}
 				if (!this.to.trim()) {
-					uni.showToast({ title: '请输入到达站', icon: 'none' })
+					this.toast('请输入到达站')
 					return
 				}
 				this.loading = true
@@ -174,12 +175,12 @@
 					} else {
 						this.trains = []
 						this.seatMap = {}
-						uni.showToast({ title: '查询失败', icon: 'none' })
+						this.toast('查询失败')
 					}
 				} catch (err) {
 					this.trains = []
 					this.seatMap = {}
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}

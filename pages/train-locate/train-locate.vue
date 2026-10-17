@@ -76,6 +76,7 @@
 			<text class="retry-text" @tap="fetchLocation" v-if="error">点击重试</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -131,7 +132,7 @@
 		methods: {
 			async fetchLocation() {
 				if (!this.train.trim()) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				this.stopPolling()

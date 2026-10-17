@@ -38,6 +38,7 @@
 			<text>{{ keyword ? '未找到匹配的车站' : '正在加载车站数据...' }}</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -75,7 +76,7 @@
 					const raw = await getStationCode()
 					this.allStations = parseStationCode(raw)
 				} catch (err) {
-					uni.showToast({ title: '加载失败', icon: 'none' })
+					this.toast('加载失败')
 				} finally {
 					this.loading = false
 				}

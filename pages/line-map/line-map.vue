@@ -44,6 +44,7 @@
 			<text>输入车次号查看铁路线路图</text>
 		</view>
 	</view>
+		<app-toast ref="toast" />
 </template>
 
 <script>
@@ -96,7 +97,7 @@
 		methods: {
 			async fetchLineMap() {
 				if (!this.train.trim()) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				this.loading = true
@@ -106,10 +107,10 @@
 					if (res.success && res.data) {
 						this.lineData = res.data
 					} else {
-						uni.showToast({ title: res.msg || '查询失败', icon: 'none' })
+						this.toast(res.msg || '查询失败')
 					}
 				} catch (err) {
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}

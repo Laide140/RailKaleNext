@@ -8,9 +8,7 @@
 				</view>
 				<view class="form-group half">
 					<text class="form-label">日期</text>
-					<picker mode="date" :value="form.date" @change="e => form.date = e.detail.value">
-						<view class="form-input">{{ form.date }}</view>
-					</picker>
+					<view class="form-input" @tap="pickDate">{{ form.date }}</view>
 				</view>
 			</view>
 			<view class="form-row">
@@ -86,6 +84,9 @@
 			</view>
 		</view>
 	</view>
+		<app-toast ref="toast" />
+		<app-modal ref="modal" />
+		<app-date-picker ref="datePick" />
 </template>
 
 <script>
@@ -129,7 +130,7 @@
 			async generateTicket() {
 				const f = this.form
 				if (!f.startStation || !f.endStation || !f.trainNo || !f.name) {
-					uni.showToast({ title: '请填写必要信息（*标注项）', icon: 'none' })
+					this.toast('请填写必要信息（*标注项）')
 					return
 				}
 				this.generating = true
@@ -159,7 +160,7 @@
 					// 生成成功后再把票号推进到下一张，避免失败也占用序号
 					this.form.ticketNo = formatTicketNo(nextTicketSeq())
 				} catch (err) {
-					uni.showToast({ title: '生成失败，请重试', icon: 'none' })
+					this.toast('生成失败，请重试')
 				} finally {
 					this.generating = false
 				}
@@ -184,20 +185,20 @@
 					document.body.appendChild(a)
 					a.click()
 					document.body.removeChild(a)
-					uni.showToast({ title: '已开始下载', icon: 'none' })
+					this.toast('已开始下载')
 					// #endif
 
 					// #ifndef H5
 					const filePath = await this.writeTempFile()
 					await this.saveToAlbum(filePath)
-					uni.showToast({ title: '已保存到相册', icon: 'success' })
+					this.toast('已保存到相册', 'success')
 					// #endif
 				} catch (err) {
 					const msg = (err && (err.errMsg || err.message)) || ''
 					if (msg.indexOf('auth deny') >= 0 || msg.indexOf('authorize') >= 0) {
 						this.promptAuth()
 					} else if (msg.indexOf('cancel') < 0) {
-						uni.showToast({ title: '保存失败，请重试', icon: 'none' })
+						this.toast('保存失败，请重试')
 					}
 				} finally {
 					this.saving = false
@@ -248,16 +249,20 @@
 				})
 			},
 
+			async pickDate() {
+				const v = await this.datePick({ value: this.form.date, title: '乘车日期' })
+				if (v) this.form.date = v
+			},
+
 			// 被拒绝授权时引导去设置页开启
-			promptAuth() {
-				uni.showModal({
+			async promptAuth() {
+				const res = await this.dialog({
 					title: '需要相册权限',
 					content: '保存车票需要访问相册，请在设置中开启权限',
 					confirmText: '去设置',
-					success: (res) => {
-						if (res.confirm) uni.openSetting({})
-					}
+					cancelText: '取消'
 				})
+				if (res.confirm) uni.openSetting({})
 			}
 		}
 	}

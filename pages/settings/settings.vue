@@ -146,6 +146,9 @@
 
 		<view class="footer">铁路万花筒</view>
 	</view>
+		<app-toast ref="toast" />
+		<app-modal ref="modal" />
+		<app-action-sheet ref="sheet" />
 </template>
 
 <script>
@@ -200,30 +203,28 @@
 			setApiSource(src) {
 				if (src === this.apiSource) return
 				if (src === 'railgo') {
-					uni.showModal({
+					this.dialog({
 						title: 'RailGo API',
 						content: '部分功能不支持RailGo API，将使用新api作为备选数据源',
-						showCancel: true,
 						confirmText: '确定',
-						cancelText: '取消',
-						success: (res) => {
-							if (res.confirm) {
-								this.$store.commit('setSettings', { apiSource: 'railgo' })
-								uni.showToast({ title: '已切换到 RailGo', icon: 'none' })
-							}
+						cancelText: '取消'
+					}).then(res => {
+						if (res.confirm) {
+							this.$store.commit('setSettings', { apiSource: 'railgo' })
+							this.toast('已切换到 RailGo')
 						}
 					})
 					return
 				}
 				this.$store.commit('setSettings', { apiSource: src })
-				uni.showToast({ title: src === 'next' ? '已切换到新 API' : '已切换到旧 API', icon: 'none' })
+				this.toast(src === 'next' ? '已切换到新 API' : '已切换到旧 API')
 			},
 			setTheme(color) {
 				this.$store.commit('setSettings', { themeColor: color })
 				this.pickerColor = color
 				this.hsl = hexToHsl(color)
 				this.hexInput = color
-				uni.showToast({ title: '主题色已更新', icon: 'none' })
+				this.toast('主题色已更新')
 			},
 			onHue(e) { this.hsl.h = Number(e.detail.value); this.syncPicker() },
 			onSat(e) { this.hsl.s = Number(e.detail.value); this.syncPicker() },
@@ -243,7 +244,7 @@
 			confirmCustomColor() {
 				this.applyHex()
 				this.$store.commit('setSettings', { themeColor: this.pickerColor })
-				uni.showToast({ title: '主题色已更新', icon: 'none' })
+				this.toast('主题色已更新')
 			},
 			normalizeHex(v) {
 				return normalizeHex(v)
@@ -260,35 +261,33 @@
 				const v = this.settingsKeys[id]
 				return !!(v && v !== 'default' && v !== '')
 			},
-			editKey(kd) {
+			async editKey(kd) {
 				const self = this
-				const isCustom = this.keyIsCustom(kd.id)
-				uni.showActionSheet({
+				const isCustom = self.keyIsCustom(kd.id)
+				const idx = await self.sheet({
+					title: kd.label,
 					itemList: isCustom
 						? ['使用官方默认', '自定义填写密钥']
-						: ['官方（默认）', '自定义填写密钥'],
-					success: (res) => {
-						if (res.tapIndex === 0) {
-							const keys = { ...self.settingsKeys, [kd.id]: 'default' }
-							self.$store.commit('setSettings', { keys })
-							uni.showToast({ title: `${kd.label} 已设为官方默认`, icon: 'none' })
-						} else {
-							uni.showModal({
-								title: `填写${kd.label}密钥`,
-								editable: true,
-								placeholderText: '粘贴你的 API Key',
-								content: isCustom ? self.settingsKeys[kd.id] : '',
-								success: (m) => {
-									if (m.confirm && m.content && m.content.trim()) {
-										const keys = { ...self.settingsKeys, [kd.id]: m.content.trim() }
-										self.$store.commit('setSettings', { keys })
-										uni.showToast({ title: '密钥已更新', icon: 'none' })
-									}
-								}
-							})
-						}
-					}
+						: ['官方（默认）', '自定义填写密钥']
 				})
+				if (idx < 0) return
+				if (idx === 0) {
+					const keys = { ...self.settingsKeys, [kd.id]: 'default' }
+					self.$store.commit('setSettings', { keys })
+					self.toast(`${kd.label} 已设为官方默认`)
+					return
+				}
+				const m = await self.dialog({
+					title: `填写${kd.label}密钥`,
+					editable: true,
+					placeholderText: '粘贴你的 API Key',
+					content: isCustom ? (self.settingsKeys[kd.id] || '') : ''
+				})
+				if (m.confirm && m.content && m.content.trim()) {
+					const keys = { ...self.settingsKeys, [kd.id]: m.content.trim() }
+					self.$store.commit('setSettings', { keys })
+					self.toast('密钥已更新')
+				}
 			}
 		}
 	}

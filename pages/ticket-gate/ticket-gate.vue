@@ -42,9 +42,7 @@
 			<view class="official-title"><i class="fas fa-clipboard-list icon-inline"></i> 12306 官方检票口</view>
 			<view class="form-group">
 				<text class="form-label">日期</text>
-				<picker mode="date" :value="officialDate" @change="e => officialDate = e.detail.value">
-					<view class="form-input date-input">{{ officialDate }}</view>
-				</picker>
+				<view class="form-input date-input" @tap="pickOfficialDate">{{ officialDate }}</view>
 			</view>
 			<button class="submit-btn btn-official" @tap="fetchOfficialGate" :loading="officialLoading">查询12306</button>
 			<view class="official-result" v-if="officialResult !== null">
@@ -52,6 +50,8 @@
 			</view>
 		</view>
 	</view>
+		<app-toast ref="toast" />
+		<app-date-picker ref="datePick" />
 </template>
 
 <script>
@@ -77,11 +77,11 @@ import { resolveTelecode } from '@/common/station.js'
 		methods: {
 			async fetchGate() {
 				if (!this.trainNum.trim()) {
-					uni.showToast({ title: '请输入车次号', icon: 'none' })
+					this.toast('请输入车次号')
 					return
 				}
 				if (!this.telecode.trim()) {
-					uni.showToast({ title: '请输入车站', icon: 'none' })
+					this.toast('请输入车站')
 					return
 				}
 				this.loading = true
@@ -92,17 +92,21 @@ import { resolveTelecode } from '@/common/station.js'
 					if (res.success && res.data) {
 						this.gateData = res.data
 					} else {
-						uni.showToast({ title: res.msg || '查询失败', icon: 'none' })
+						this.toast(res.msg || '查询失败')
 					}
 				} catch (err) {
-					uni.showToast({ title: '网络异常', icon: 'none' })
+					this.toast('网络异常')
 				} finally {
 					this.loading = false
 				}
 			},
+			async pickOfficialDate() {
+				const v = await this.datePick({ value: this.officialDate, title: '乘车日期' })
+				if (v) this.officialDate = v
+			},
 			async fetchOfficialGate() {
 				if (!this.trainNum.trim() || !this.telecode.trim()) {
-					uni.showToast({ title: '请先填写车次和车站', icon: 'none' })
+					this.toast('请先填写车次和车站')
 					return
 				}
 				this.officialLoading = true

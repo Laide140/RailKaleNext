@@ -5,6 +5,7 @@
 			<text class="badge-province">{{ loadingText }}</text>
 		</view>
 	</view>
+		<app-modal ref="modal" />
 </template>
 
 <script>
@@ -183,10 +184,10 @@ export default {
 			})
 		},
 
-		confirm(msg) {
-			return new Promise(function(resolve) {
-				uni.showModal({ title: '提示', content: msg, success: function(r) { resolve(r.confirm) } })
-			})
+		async confirm(msg) {
+			// 自绘对话框；resolve 前必须回到组件 this，不能用普通 function
+			const r = await this.dialog({ title: '提示', content: msg })
+			return r.confirm
 		},
 
 		waitWebView() {
