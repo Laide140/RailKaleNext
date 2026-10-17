@@ -44,9 +44,9 @@
 					</view>
 					<view class="row-right">
 						<text class="row-time">{{ fmt(s.sale_time) }}</text>
-						<!-- 无路局归属 = 已撤销车站，给出明确标注而非留空 -->
+						<!-- 无路局归属 = 该站已改名，给出明确标注而非留空 -->
 						<text class="row-bureau" v-if="bureau(s.bureau_code)">{{ bureau(s.bureau_code) }}</text>
-						<text class="row-closed" v-else>已停办</text>
+						<text class="row-closed" v-else>已改名</text>
 					</view>
 				</view>
 			</view>
@@ -64,7 +64,7 @@
 
 			<!-- 名词说明 -->
 			<view class="footnote" v-if="list.length">
-				<text>「已停办」指该站所属路局建制已撤销，不再有开售时间。</text>
+				<text>「已改名」指该站已更名，原站名不再对应有效车站。</text>
 			</view>
 		</template>
 	</view>
@@ -249,7 +249,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.row-bureau { font-size: 11px; color: var(--secondary); }
-	/* 已停办车站：中性描边标记，不用彩色以免与语义色混淆 */
+	/* 已改名车站：中性描边标记，不用彩色以免与语义色混淆 */
 	.row-closed {
 		font-size: 11px;
 		color: var(--secondary);

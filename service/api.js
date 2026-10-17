@@ -313,13 +313,12 @@ export const BUREAU_NOTES = {
 }
 
 /**
- * 是否为已撤销（停办）车站
+ * 是否为已改名的车站
  *
- * 数据源中 bureau_code 为空的车站即属此类：路局建制已撤销，
- * 不再有开售时间。目前共 6 个，其 station_telecode 同样为空 ——
- * 电报码随路局号段一同注销，可作为佐证。
+ * 数据源中 bureau_code 为空即表示该站已改名：原站名对应的记录不再
+ * 归属任何路局，station_telecode 也一并为空（电报码随旧站名作废）。
  */
-export function isClosedStation(item) {
+export function isRenamedStation(item) {
 	return !String((item && item.bureau_code) || '').trim()
 }
 
@@ -705,7 +704,7 @@ export default {
 	BUREAU_SHORT_NAMES,
 	BUREAU_NOTES,
 	bureauName,
-	isClosedStation,
+	isRenamedStation,
 	bureauShortName,
 	getTrainData,
 	getTrainSetOfTrain,
