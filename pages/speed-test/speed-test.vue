@@ -123,6 +123,12 @@
 				map: null,            // AMap.Map 实例
 				_tileLoaded: false,
 				_g: null,             // 高德地图叠加 canvas 的 2d context
+				_proj: null,          // 缓存的 Web Mercator 投影参数
+				_redrawTimer: null,   // 重绘节流定时器
+				_pathCache: [],       // 已投影的轨迹点缓存
+				_pathCacheKey: '',    // 缓存键（点数 | 投影参数）
+				_lastDot: null,       // 上一次小圆点位置（供脉冲局部重绘）
+				_dotRadius: 24,
 				_canvasEl: null,
 				_drawTimer: null,
 				_frame: 0,
@@ -227,8 +233,13 @@
 				if (!this._g) return
 				this._sizeCanvas()
 
-				this.map.on('moveend', () => this.redrawPath())
-				this.map.on('zoomend', () => this.redrawPath())
+				// 拖动/缩放过程中也要重绘，否则 canvas 不跟随地图移动，
+				// 会看到轨迹「漂移」直到 moveend 才归位。
+				// 用节流控制频率，避免每帧重算拖慢地图。
+				const onMove = () => this.scheduleRedraw()
+				this.map.on('mapmove', onMove)      // 拖动/缩放进行中
+				this.map.on('moveend', onMove)
+				this.map.on('zoomend', onMove)
 				// 保存引用以便在 cleanup 时移除，避免监听泄漏
 				this._onResize = () => {
 					this._sizeCanvas()
@@ -264,12 +275,36 @@
 			},
 
 			// 用高德 lngLatToContainer 把轨迹经纬度画到叠加 canvas 上（原生 2D）
+			// 节流重绘：拖动/缩放时短时间内只重绘一次
+			scheduleRedraw() {
+				if (this._redrawTimer) return
+				this._redrawTimer = setTimeout(() => {
+					this._redrawTimer = null
+					this.redrawPath()
+				}, 16)
+			},
+
 			redrawPath() {
 				const g = this._g
 				if (!g || !this.map || !this._mapRect) return
+				// 每次重绘前刷新投影参数（纯数学，开销极小）
+				this.refreshProjection()
 				g.clearRect(0, 0, this._mapRect.width, this._mapRect.height)
 				const pts = this.points
-				if (pts.length >= 2) {
+				// 轨迹点投影结果按 (点数, 投影版本) 缓存：
+				// 投影未变时（纯脉冲刷新）直接复用，跳过重复数学运算
+				const projKey = this._proj ? (this._proj.cX + ',' + this._proj.cY + ',' + this._proj.scale) : ''
+				if (this._pathCacheKey !== pts.length + '|' + projKey) {
+					const projected = []
+					for (let i = 0; i < pts.length; i++) {
+						const xy = this.projectTo(pts[i].lng, pts[i].lat)
+						if (xy) projected.push(xy)
+					}
+					this._pathCache = projected
+					this._pathCacheKey = pts.length + '|' + projKey
+				}
+				const cached = this._pathCache || []
+				if (cached.length >= 2) {
 					g.lineCap = 'round'
 					g.lineJoin = 'round'
 					// 路径光晕
@@ -277,9 +312,8 @@
 					g.strokeStyle = 'rgba(52,199,89,0.25)'
 					g.lineWidth = 8
 					let started = false
-					for (let i = 0; i < pts.length; i++) {
-						const px = this.toCanvasXY(pts[i].lng, pts[i].lat)
-						if (!px) continue            // 跳过无效点，别整体放弃
+					for (let i = 0; i < cached.length; i++) {
+						const px = cached[i]
 						if (!started) { g.moveTo(px.x, px.y); started = true }
 						else g.lineTo(px.x, px.y)
 					}
@@ -289,33 +323,79 @@
 					g.strokeStyle = '#34c759'
 					g.lineWidth = 3.5
 					started = false
-					for (let i = 0; i < pts.length; i++) {
-						const px = this.toCanvasXY(pts[i].lng, pts[i].lat)
-						if (!px) continue
+					for (let i = 0; i < cached.length; i++) {
+						const px = cached[i]
 						if (!started) { g.moveTo(px.x, px.y); started = true }
 						else g.lineTo(px.x, px.y)
 					}
 					if (started) g.stroke()
 				}
 				// 当前位置小圆点
-				const last = this.points[this.points.length - 1] || this.lastFix
-				if (last) {
-					const px = this.toCanvasXY(last.lng, last.lat)
-					if (px) this.drawDot(px.x, px.y)
+				const lastProj = cached.length ? cached[cached.length - 1] : null
+				if (lastProj) {
+					this.drawDot(lastProj.x, lastProj.y)
+				} else {
+					const last = this.points[this.points.length - 1] || this.lastFix
+					if (last) {
+						const px = this.projectTo(last.lng, last.lat)
+						if (px) this.drawDot(px.x, px.y)
+					}
 				}
 			},
 
-			toCanvasXY(lng, lat) {
+			/**
+			 * 缓存当前投影参数（Web Mercator）
+			 *
+			 * 参照路网地图的做法：不逐点调用 map.lngLatToContainer ——
+			 * 那会为每个点创建 AMap.LngLat 与 Pixel 对象，拖图时明显卡顿。
+			 * 这里改为纯数学投影，参数只在移动/缩放后重算一次。
+			 */
+			refreshProjection() {
+				if (!this.map) return
 				try {
-					const p = this.map.lngLatToContainer(new window.AMap.LngLat(lng, lat))
-					if (!p || !isFinite(p.x) || !isFinite(p.y)) return null
-					return { x: p.x, y: p.y }
-				} catch (e) { return null }
+					const size = this.map.getSize ? this.map.getSize() : null
+					const center = this.map.getCenter()
+					const z = this.map.getZoom()
+					const scale = 256 * Math.pow(2, z)
+					const cLng = center.getLng()
+					let sinLat = Math.sin(center.getLat() * Math.PI / 180)
+					if (sinLat > 0.9999) sinLat = 0.9999
+					if (sinLat < -0.9999) sinLat = -0.9999
+					const cX = (cLng + 180) / 360 * scale
+					const cY = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale
+					const w = size ? size.getWidth() : (this._mapRect ? this._mapRect.width : 0)
+					const h = size ? size.getHeight() : (this._mapRect ? this._mapRect.height : 0)
+					this._proj = { scale, cX, cY, ox: w / 2, oy: h / 2 }
+				} catch (e) {
+					this._proj = null
+				}
+			},
+
+			// 经纬度 → 画布坐标（纯数学，无对象创建；结果写入 out 复用）
+			projectTo(lng, lat, out) {
+				const p = this._proj
+				if (!p) return null
+				let sinLat = Math.sin(lat * Math.PI / 180)
+				if (sinLat > 0.9999) sinLat = 0.9999
+				if (sinLat < -0.9999) sinLat = -0.9999
+				const x = p.ox + ((lng + 180) / 360 * p.scale - p.cX)
+				const y = p.oy + ((0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * p.scale - p.cY)
+				if (!isFinite(x) || !isFinite(y)) return null
+				if (out) { out.x = x; out.y = y; return out }
+				return { x, y }
+			},
+
+			// 兼容旧调用名
+			toCanvasXY(lng, lat) {
+				return this.projectTo(lng, lat)
 			},
 
 			drawDot(x, y) {
 				const g = this._g
 				if (!g) return
+				// 记录位置，供脉冲动画做局部重绘
+				this._lastDot = { x, y }
+				this._dotRadius = 24
 				const pulse = 12 + Math.round(Math.sin(this._frame / 3) * 2)
 				// 外圈脉冲
 				g.beginPath()
@@ -488,6 +568,7 @@
 				this.recording = false
 				this.stopDrawLoop()
 				this.clearWatch()
+				if (this._redrawTimer) { clearTimeout(this._redrawTimer); this._redrawTimer = null }
 				// 移除 window resize 监听
 				if (this._onResize && typeof window !== 'undefined' && window.removeEventListener) {
 					try { window.removeEventListener('resize', this._onResize) } catch (e) {}
@@ -513,9 +594,20 @@
 			pulseTick() {
 				if (!this.recording) return
 				this._frame = (this._frame || 0) + 1
-				// 刷新当前时间戳，驱动"总路程÷总时长"的速度与测试时长实时更新
+				// 刷新当前时间戳，驱动「总路程÷总时长」的速度与测试时长实时更新
 				this._now = Date.now()
-				this.redrawPath()
+				// 脉冲动画只需重画小圆点那一小块，不必重绘整条轨迹：
+				// 轨迹点可能上百个，每 180ms 全量重绘会明显拖慢。
+				if (this._proj && this._lastDot) {
+					const g = this._g
+					if (g) {
+						const r = this._dotRadius || 20
+						g.clearRect(this._lastDot.x - r, this._lastDot.y - r, r * 2, r * 2)
+					}
+					this.drawDot(this._lastDot.x, this._lastDot.y)
+				} else {
+					this.redrawPath()
+				}
 			},
 
 			// ===== 计算 =====
