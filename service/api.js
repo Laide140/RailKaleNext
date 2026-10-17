@@ -494,14 +494,17 @@ const formationCache = {}
 /**
  * 编组车厢数探测
  *
- * 图片按编组数量命名，需 HEAD 探测确定实际编组：
- *   16.png 存在 → 16 或 17 编组（17 编组的图即为 16.png）
- *   15.png 存在 → 15 编组
- *   都不存在   → 8 编组
+ * 图片按序号命名，序号从 0 开始，因此 N 编组共 N 张图、末张为 (N-1).png：
+ *   8 编组  → 0.png ~ 7.png
+ *   16 编组 → 0.png ~ 15.png
+ *   17 编组 → 0.png ~ 16.png
+ *
+ * 因此用 16.png 是否存在区分 16/17 编组，15.png 是否存在区分是否长编组，
+ * 都不存在即 8 编组。返回值是编组节数，取图时直接用 0 ~ count-1 的下标。
  *
  * 注意：由调用方保证只探测一次并缓存结果（见 formationCache）。
  * @param {string} trainSet 车组号
- * @returns {Promise<number>} 车厢节数（16 | 15 | 8）
+ * @returns {Promise<number>} 编组节数（8 | 16 | 17）
  */
 export async function detectFormation(trainSet) {
 	const model = carModelOf(trainSet)
@@ -522,9 +525,11 @@ export async function detectFormation(trainSet) {
 		})
 	})
 
+	// 末张图的下标决定编组：16.png 存在 → 17 编组，
+	// 否则 15.png 存在 → 16 编组，都不是则 8 编组。
 	let n = 8
-	if (await exists(16)) n = 16
-	else if (await exists(15)) n = 15
+	if (await exists(16)) n = 17
+	else if (await exists(15)) n = 16
 
 	formationCache[model] = n
 	return n
