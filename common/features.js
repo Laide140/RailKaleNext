@@ -21,6 +21,8 @@ export const FEATURES = [
 	{ id: 'rail-network-map', icon: 'fa-map', label: '路网地图', path: 'rail-network-map', group: 'tools' },
 	{ id: 'souvenir-ticket', icon: 'fa-print', label: '纪念车票', path: 'souvenir-ticket', group: 'tools' },
 	{ id: 'train-broadcast', icon: 'fa-bullhorn', label: '列车广播', path: 'train-broadcast', group: 'tools' },
+	{ id: 'big-data', icon: 'fa-chart-simple', label: '铁路大数据', path: 'big-data', group: 'tools' },
+	{ id: 'operation-share', icon: 'fa-camera-retro', label: '运转分享', path: 'operation-share', group: 'tools' },
 ]
 
 export const SECTIONS = [
@@ -43,7 +45,7 @@ export const SECTIONS = [
 		title: '实用工具',
 		subtitle: '车组担当、路网地图与趣味辅助工具',
 		icon: 'fa-comment-dots',
-		features: ['emu-query', 'rail-network-map', 'souvenir-ticket', 'train-broadcast'],
+		features: ['emu-query', 'rail-network-map', 'souvenir-ticket', 'train-broadcast', 'big-data', 'operation-share'],
 	},
 ]
 

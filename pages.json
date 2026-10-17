@@ -146,6 +146,22 @@
             }
         },
         {
+            "path": "pages/big-data/big-data",
+            "style": {
+                "navigationBarTitleText": "铁路大数据",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
+            "path": "pages/operation-share/operation-share",
+            "style": {
+                "navigationBarTitleText": "运转分享",
+                "navigationBarBackgroundColor": "#ffffff",
+                "navigationBarTextStyle": "black"
+            }
+        },
+        {
             "path": "pages/mine/mine",
             "style": {
                 "navigationBarTitleText": "我的",
