@@ -111,10 +111,6 @@
 				watchId: null,        // 浏览器 geolocation watch id
 				_pollTimer: null,     // 非 H5 兜底的轮询定时器
 				startTs: 0,           // 本轮测速开始时间戳（驱动测试时长，不能带 _ 前缀）
-				segSpeed: 0,          // 最近一段位移的瞬时速度（km/h）
-				// 注意：Vue 2 不会代理以 _ 或 $ 开头的 data 属性，
-				// 用 this._segSpeed = x 只会写到实例上，视图读不到，
-				// 所以响应式字段名不得带下划线前缀。
 				nowTs: 0,             // 当前时间戳（驱动测试时长刷新，不能带 _ 前缀）
 				map: null,            // AMap.Map 实例
 				_tileLoaded: false,
@@ -142,16 +138,12 @@
 			this.restoreTrack(gps)
 		},
 		computed: {
-			/**
-			 * 实时速度（km/h）= 最近两个定位点之间的瞬时速度。
-			 *
-			 * 不能用「总路程 ÷ 总时长」：刚启动时总路程还是 0，
-			 * 那样无论怎么动都会显示 0.00 km/h；
-			 * 且平均速度对走走停停的车次没有参考意义。
-			 */
+			// 实时速度 = 总路程 ÷ 测试总时长（km/h）
 			currentSpeed() {
-				const seg = this.segSpeed
-				return seg > 0 ? seg : 0
+				const elapsedMs = this.nowTs - this.startTs
+				const seconds = elapsedMs > 0 ? elapsedMs / 1000 : 0
+				if (seconds <= 0 || this.totalDistance <= 0) return 0
+				return (this.totalDistance / 1000) / (seconds / 3600)
 			},
 			// 已测试时长（mm:ss / hh:mm:ss）
 			elapsedText() {
@@ -612,7 +604,6 @@
 				if (!this._restoredCount) this.points = []
 				this.maxSpeed = 0
 				this.totalDistance = 0
-				this.segSpeed = 0
 				this.lastFix = null
 				this.startTs = Date.now()
 				this.nowTs = this.startTs
@@ -711,28 +702,21 @@
 				this.hasFix = true
 				this.nowTs = t
 
-				// 累计路程 + 瞬时速度
+				// 累计路程（0.6m 以下当作定位抖动，不计入）
 				if (this.lastFix) {
 					const d = this.distance(this.lastFix.lat, this.lastFix.lng, lat, lng)
 					const dt = (t - this.lastFix.t) / 1000
-					// 0.6m 以下当作定位抖动，不计入路程
 					if (dt > 0 && d > 0.6) {
 						this.totalDistance += d
-						// 瞬时速度：位移 / 时间间隔（m/s → km/h）
-						this.segSpeed = (d / dt) * 3.6
-					} else if (dt > 0) {
-						// 基本没动：速度归零，避免停留在上一次的读数
-						this.segSpeed = 0
 					}
 				}
 				this.lastFix = { lng, lat, t }
 				this.points.push({ lng, lat, t })
 
-				// 若当前瞬时速度大于最高速度则更新最高速度。
-				// 前 3 秒不记录（避免定位初始噪声）；
-				// 直接用刚算出的 segSpeed，不读 computed，免得拿到上一帧的旧值。
+				// 每次当前速度变化时，若当前速度大于最高速度则更新最高速度
+				// 前 3 秒不计算最高速度（避免定位初始噪声）
 				if (t - this.startTs >= 3000) {
-					const curSpeed = this.segSpeed > 0 ? this.segSpeed : 0
+					const curSpeed = this.currentSpeed
 					if (curSpeed > this.maxSpeed) this.maxSpeed = curSpeed
 				}
 
