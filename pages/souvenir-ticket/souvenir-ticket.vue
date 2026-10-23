@@ -3,7 +3,7 @@
 		<view class="form-card">
 			<view class="form-row">
 				<view class="form-group half">
-					<text class="form-label">车次号</text>
+					<text class="form-label">车次号<text class="req">*</text></text>
 					<input class="form-input" v-model="form.trainNo" placeholder="如：G1" />
 				</view>
 				<view class="form-group half">
@@ -13,11 +13,11 @@
 			</view>
 			<view class="form-row">
 				<view class="form-group half">
-					<text class="form-label">始发站</text>
+					<text class="form-label">始发站<text class="req">*</text></text>
 					<input class="form-input" v-model="form.startStation" placeholder="如：北京南" />
 				</view>
 				<view class="form-group half">
-					<text class="form-label">终点站</text>
+					<text class="form-label">终点站<text class="req">*</text></text>
 					<input class="form-input" v-model="form.endStation" placeholder="如：上海虹桥" />
 				</view>
 			</view>
@@ -52,7 +52,7 @@
 				</view>
 			</view>
 			<view class="form-group">
-				<text class="form-label">乘客姓名</text>
+				<text class="form-label">乘客姓名<text class="req">*</text></text>
 				<input class="form-input" v-model="form.name" placeholder="请输入姓名" />
 			</view>
 			<view class="form-group">
@@ -300,6 +300,11 @@
 		color: #999;
 		display: block;
 		margin-bottom: 8rpx;
+	}
+	/* 必填项标记 */
+	.req {
+		color: #e74c3c;
+		margin-left: 4rpx;
 	}
 
 	.form-input {

@@ -18,6 +18,7 @@ export const FEATURES = [
 	{ id: 'sale-time', icon: 'fa-clock', label: '开售时间', path: 'sale-time', group: 'station' },
 
 	{ id: 'emu-query', icon: 'fa-subway', label: '运用担当', path: 'emu-query', group: 'tools' },
+	{ id: 'route-planner', icon: 'fa-route', label: '算路器', path: 'route-planner', group: 'tools' },
 	{ id: 'rail-network-map', icon: 'fa-map', label: '路网地图', path: 'rail-network-map', group: 'tools' },
 	{ id: 'souvenir-ticket', icon: 'fa-print', label: '纪念车票', path: 'souvenir-ticket', group: 'tools' },
 	{ id: 'train-broadcast', icon: 'fa-bullhorn', label: '列车广播', path: 'train-broadcast', group: 'tools' },
@@ -45,7 +46,7 @@ export const SECTIONS = [
 		title: '实用工具',
 		subtitle: '车组担当、路网地图与趣味辅助工具',
 		icon: 'fa-comment-dots',
-		features: ['emu-query', 'rail-network-map', 'souvenir-ticket', 'train-broadcast', 'big-data', 'operation-share'],
+		features: ['emu-query', 'route-planner', 'rail-network-map', 'souvenir-ticket', 'train-broadcast', 'big-data', 'operation-share'],
 	},
 ]
 

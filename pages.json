@@ -116,6 +116,12 @@
             }
         },
         {
+            "path": "pages/route-planner/route-planner",
+            "style": {
+                "navigationBarTitleText": "算路器"
+            }
+        },
+        {
             "path": "pages/train-broadcast/train-broadcast",
             "style": {
                 "navigationBarTitleText": "列车广播"

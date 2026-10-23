@@ -274,6 +274,122 @@ export function getAmapStaticMap(size, markers, paths) {
 
 
 /**
+ * WGS-84 → GCJ-02 坐标转换（高德坐标拾取接口）
+ *
+ * 系统定位与 .travel 文件里的坐标都是 WGS-84，
+ * 而高德地图、静态图与路径绘制都要求 GCJ-02，必须在前端转一次。
+ * 一次最多 40 个点（接口限制），批量按批请求。
+ *
+ * @param {Array<{lng:number, lat:number}>} points
+ * @returns {Promise<Array<{lng:number, lat:number}>>} 与入参等长、同序；失败返回原坐标
+ */
+export function wgs84ToGcj02(points) {
+	const pts = Array.isArray(points) ? points : []
+	if (!pts.length) return Promise.resolve([])
+
+	const key = getKey('amap')
+	// 没配密钥时不做转换：返回原坐标，避免整条路径消失
+	if (!key) return Promise.resolve(pts.map(p => ({ lng: p.lng, lat: p.lat })))
+
+	const CHUNK = 40
+	const chunks = []
+	for (let i = 0; i < pts.length; i += CHUNK) chunks.push(pts.slice(i, i + CHUNK))
+
+	const convertOne = (list) => new Promise((resolve) => {
+		const locations = list.map(p => `${p.lng},${p.lat}`).join('|')
+		uni.request({
+			url: 'https://restapi.amap.com/v3/assistant/coordinate/convert'
+				+ `?locations=${encodeURIComponent(locations)}&coordsys=gps&output=json&key=${key}`,
+			responseType: 'text',
+			dataType: 'text',
+			timeout: 10000,
+			success: (r) => {
+				try {
+					const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					if (!res || res.status !== '1' || !res.locations) return resolve(null)
+					const out = String(res.locations).split(';').map(s => {
+						const [lng, lat] = s.split(',').map(Number)
+						return { lng, lat }
+					})
+					// 接口可能只回一个点（批量不识别时），此时不可用
+					if (out.length !== list.length) return resolve(null)
+					resolve(out)
+				} catch (e) {
+					resolve(null)
+				}
+			},
+			fail: () => resolve(null)
+		})
+	})
+
+	return Promise.all(chunks.map(convertOne)).then(parts => {
+		const out = []
+		parts.forEach((part, i) => {
+			if (part && part.length === chunks[i].length) out.push(...part)
+			// 某批失败就保留该批原始坐标，不至于整条轨迹丢失
+			else out.push(...chunks[i].map(p => ({ lng: p.lng, lat: p.lat })))
+		})
+		return out
+	})
+}
+
+/**
+ * 算路器 —— 任意两站之间的最短走行线路（CRTrainRoute）
+ * GET /api/v3/stationRoute?from={站名或电报码}&to={...}&km={可选目标里程}
+ *
+ * 响应要点：
+ *   distance.meters / kilometers  走行距离
+ *   stations[]                    途经车站（按沿线里程升序，含 km / offsetM）
+ *   geometry.coordinates          LineString [lng, lat] 数组（GCJ-02，可直接上高德地图）
+ *   ferry                         跨海轮渡信息
+ *   kmPlan                        指定里程规划详情，未指定为 null
+ *
+ * 注：该端点冷启动较慢（实测首个请求 10s+），故超时放宽到 60s。
+ *
+ * @param {string} from 起点站名或电报码
+ * @param {string} to   终点站名或电报码
+ * @param {number} [km] 目标里程（公里），留空走最短路
+ * @param {number} [ver] 指定里程模式：1=整段（大概里程，默认，快）；2=微调（精确里程，慢）
+ * @returns {Promise<Object|null>}
+ */
+export function getStationRoute(from, to, km, ver) {
+	let url = 'https://next.laide.net.cn/api/v3/stationRoute'
+		+ '?from=' + encodeURIComponent(from)
+		+ '&to=' + encodeURIComponent(to)
+	if (km) url += '&km=' + encodeURIComponent(km)
+	if (ver) url += '&ver=' + encodeURIComponent(ver)
+	return new Promise((resolve) => {
+		uni.request({
+			url,
+			responseType: 'text',
+			dataType: 'text',
+			// 指定里程模式在服务端要跑 45s+，最慢见过 62s，
+			// 超时给到 120s 以免正常请求被提前掐断
+			timeout: 120000,
+			success: (r) => {
+				try {
+					const res = typeof r.data === 'string' ? JSON.parse(r.data) : r.data
+					if (!res) {
+						// 504/502 时服务端返回的是 HTML 错误页，提示更明确
+						if (r.statusCode === 504) return resolve({ ok: false, error: '算路超时，请稍后重试', hint: '指定里程模式计算较慢' })
+						if (r.statusCode === 502) return resolve({ ok: false, error: '算路服务暂不可用' })
+						return resolve(null)
+					}
+					// 接口用 ok 字段表示成功，失败时带 error / hint
+					if (res.ok === false) {
+						return resolve({ ok: false, error: res.error || '', hint: res.hint || '', statusCode: r.statusCode })
+					}
+					resolve(res)
+				} catch (e) {
+					resolve(null)
+				}
+			},
+			fail: () => resolve(null)
+		})
+	})
+}
+
+/**
  * 车站开售时间 —— 自有数据源
  * GET /getStationSaleTimeInfo/   （返回全部车站，约 3149 条 / 800KB，忽略入参）
  *
@@ -828,6 +944,8 @@ export default {
 	getRailwayIndex,
 	getRailwayGeoJSON,
 	getAmapStaticMap,
+	wgs84ToGcj02,
+	getStationRoute,
 	getStationSaleTimeInfo,
 	formatSaleTime,
 	BUREAU_NAMES,

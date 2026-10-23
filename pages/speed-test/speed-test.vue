@@ -83,6 +83,7 @@
 
 <script>
 	import { getKey } from '@/common/keys.js'
+	import { wgs84ToGcj02 } from '@/service/api.js'
 	import { getTravel, addGpsPoint } from '@/common/travel.js'
 
 	export default {
@@ -109,8 +110,12 @@
 				// 运行时
 				watchId: null,        // 浏览器 geolocation watch id
 				_pollTimer: null,     // 非 H5 兜底的轮询定时器
-				_startTs: 0,
-				_now: 0,              // 当前时间戳（用于实时刷新 总路程/总时长 得出速度）
+				startTs: 0,           // 本轮测速开始时间戳（驱动测试时长，不能带 _ 前缀）
+				segSpeed: 0,          // 最近一段位移的瞬时速度（km/h）
+				// 注意：Vue 2 不会代理以 _ 或 $ 开头的 data 属性，
+				// 用 this._segSpeed = x 只会写到实例上，视图读不到，
+				// 所以响应式字段名不得带下划线前缀。
+				nowTs: 0,             // 当前时间戳（驱动测试时长刷新，不能带 _ 前缀）
 				map: null,            // AMap.Map 实例
 				_tileLoaded: false,
 				_g: null,             // 高德地图叠加 canvas 的 2d context
@@ -131,20 +136,27 @@
 			this.travelId = decodeURIComponent(options.travelId)
 			this.travelTrain = options.train ? decodeURIComponent(options.train) : ''
 			const t = getTravel(this.travelId)
-			this.savedPoints = (t && t.gps) ? Object.keys(t.gps).length : 0
+			const gps = (t && t.gps) || {}
+			this.savedPoints = Object.keys(gps).length
+			// 回显历史轨迹：文件里是 WGS-84，先转 GCJ-02 再画
+			this.restoreTrack(gps)
 		},
 		computed: {
-			// 实时速度 = 总路程 ÷ 测试总时长（km/h）
+			/**
+			 * 实时速度（km/h）= 最近两个定位点之间的瞬时速度。
+			 *
+			 * 不能用「总路程 ÷ 总时长」：刚启动时总路程还是 0，
+			 * 那样无论怎么动都会显示 0.00 km/h；
+			 * 且平均速度对走走停停的车次没有参考意义。
+			 */
 			currentSpeed() {
-				const elapsedMs = this._now - this._startTs
-				const seconds = elapsedMs > 0 ? elapsedMs / 1000 : 0
-				if (seconds <= 0 || this.totalDistance <= 0) return 0
-				return (this.totalDistance / 1000) / (seconds / 3600)
+				const seg = this.segSpeed
+				return seg > 0 ? seg : 0
 			},
 			// 已测试时长（mm:ss / hh:mm:ss）
 			elapsedText() {
-				const ref = this._now > 0 ? this._now : Date.now()
-				const start = this._startTs > 0 ? this._startTs : ref
+				const ref = this.nowTs > 0 ? this.nowTs : Date.now()
+				const start = this.startTs > 0 ? this.startTs : ref
 				const totalSec = Math.max(0, Math.floor((ref - start) / 1000))
 				const h = Math.floor(totalSec / 3600)
 				const m = Math.floor((totalSec % 3600) / 60)
@@ -163,6 +175,45 @@
 			this.cleanup()
 		},
 		methods: {
+			/**
+			 * 回显行程里已存的轨迹。
+			 * .travel 中的坐标是 WGS-84，地图要 GCJ-02，先批量转换再入点。
+			 */
+			async restoreTrack(gps) {
+				const keys = Object.keys(gps).sort((a, b) => Number(a) - Number(b))
+				if (!keys.length) return
+				const raw = keys
+					.map(k => {
+						const v = gps[k]
+						if (!Array.isArray(v) || v.length < 2) return null
+						const lng = Number(v[0])
+						const lat = Number(v[1])
+						return (isFinite(lng) && isFinite(lat)) ? { lng, lat } : null
+					})
+					.filter(Boolean)
+				if (!raw.length) return
+
+				let pts = raw
+				try {
+					const gcj = await wgs84ToGcj02(raw)
+					if (gcj && gcj.length === raw.length) pts = gcj
+				} catch (e) { /* 转换失败就用原坐标，至少位置略偏也能看 */ }
+
+				const t = Date.now()
+				this.points = pts.map(p => ({ lng: p.lng, lat: p.lat, t }))
+				// 记住已有轨迹条数：点「开始」时不清掉，新旧轨迹连成一条
+				this._restoredCount = this.points.length
+				this.hasFix = true
+				const last = this.points[this.points.length - 1]
+				this.longitude = last.lng
+				this.latitude = last.lat
+				this.lastFix = { lng: last.lng, lat: last.lat, t }
+				// 地图可能还没初始化完，此时 redrawPath 会直接返回，
+				// 由地图 ready 回调补一次重绘；这里再兜一次防竞态
+				this.redrawPath()
+				setTimeout(() => { this.redrawPath() }, 300)
+			},
+
 			// ===== 高德地图初始化（H5）=====
 			initMap() {
 				const that = this
@@ -203,12 +254,23 @@
 						if (this.map && this.map.on) {
 							this.map.on('complete', () => {
 								this._sizeCanvas()
+								// 首帧完成后才能可靠地移动视野，历史轨迹在此对齐
+								this.fitToTrack()
 								this.redrawPath()
 							})
 						}
 						this.$nextTick(() => { this._sizeCanvas(); this.redrawPath() })
 						this.mapReady = true
-						this.statusText = '点击开始进行定位测速'
+						this.statusText = this.points.length
+							? '已载入历史轨迹，点击开始继续测速'
+							: '点击开始进行定位测速'
+						// 有历史轨迹时把视野拉到轨迹上，否则用户看不到已有路径。
+						// 不用 setFitView：它依赖地图已完成首帧渲染，此处调用时常常无效。
+						// 延迟一拍再对齐：地图刚建好时 setZoom/setCenter 会被内部
+						// 的首帧定位逻辑覆盖，等它落定后再改才生效。
+						if (this.points.length) {
+							setTimeout(() => this.fitToTrack(), 600)
+						}
 						this.drawPlaceholder()
 					})
 				}).catch(() => {
@@ -308,6 +370,69 @@
 			// 无轨迹时的占位提示
 			drawPlaceholder() {
 				this.redrawPath()
+			},
+
+			/**
+			 * 把地图视野对准当前轨迹（历史轨迹回显时用）。
+			 * 直接算经纬度包围盒中心 + 合适缩放，再等 moveend 重绘，
+			 * 避免 setFitView 在地图未就绪时静默失败。
+			 */
+			fitToTrack() {
+				const pts = this.points
+				if (!pts.length || !this.map) return
+				let minLng = Infinity, maxLng = -Infinity
+				let minLat = Infinity, maxLat = -Infinity
+				for (const p of pts) {
+					if (p.lng < minLng) minLng = p.lng
+					if (p.lng > maxLng) maxLng = p.lng
+					if (p.lat < minLat) minLat = p.lat
+					if (p.lat > maxLat) maxLat = p.lat
+				}
+				const cLng = (minLng + maxLng) / 2
+				const cLat = (minLat + maxLat) / 2
+
+				// 按包围盒跨度选一个能装下的缩放级别
+				let zoom = 17
+				if (pts.length > 1) {
+					const rect = this._mapRect || {}
+					const w = rect.width || 320
+					const h = rect.height || 240
+					const spanLng = Math.max(maxLng - minLng, 1e-6)
+					const spanLat = Math.max(maxLat - minLat, 1e-6)
+					const zLng = Math.log2((w * 360) / (spanLng * 256 * 1.6))
+					const zLat = Math.log2((h * 360) / (spanLat * 256 * 2.2))
+					zoom = Math.max(4, Math.min(18, Math.floor(Math.min(zLng, zLat))))
+				} else {
+					zoom = 17
+				}
+
+				this.settingCenter = true
+				let finished = false
+				const finish = () => {
+					if (finished) return
+					finished = true
+					this.settingCenter = false
+					// 等地图状态稳定后再投影：moveend 时 getCenter() 可能仍是
+					// 动画中间值，直接重绘会按错位的中心算像素。
+					requestAnimationFrame(() => {
+						requestAnimationFrame(() => this.redrawPath())
+					})
+				}
+
+				// 分两步：先改缩放并等它落定，再设中心。
+				// 若同时下发，setZoom 的动画会覆盖 setCenter 的目标，
+				// 结果中心只挪了一小段（表现为轨迹仍在视野外）。
+				const applyCenter = () => {
+					try { this.map.setCenter([cLng, cLat], false) } catch (e) {}
+					try { if (this.map.once) this.map.once('moveend', finish) } catch (e) {}
+					setTimeout(finish, 600)
+				}
+				try {
+					this.map.setZoom(zoom, false)
+				} catch (e) {}
+				// 缩放生效后再居中，留出足够时间让瓦片与状态同步
+				setTimeout(applyCenter, 350)
+				setTimeout(finish, 3000)
 			},
 
 			// 用高德 lngLatToContainer 把轨迹经纬度画到叠加 canvas 上（原生 2D）
@@ -483,12 +608,14 @@
 			startTrack() {
 				// 先清理上一次可能残留的监听/定时器
 				this.clearWatch()
-				this.points = []
+				// 保留行程里已有的历史轨迹，只重置本次测速的统计量
+				if (!this._restoredCount) this.points = []
 				this.maxSpeed = 0
 				this.totalDistance = 0
+				this.segSpeed = 0
 				this.lastFix = null
-				this._startTs = Date.now()
-				this._now = this._startTs
+				this.startTs = Date.now()
+				this.nowTs = this.startTs
 				this.recording = true
 				this.error = false
 				this.statusText = '正在获取定位权限…'
@@ -516,7 +643,7 @@
 				const timer = setInterval(() => {
 					if (!this.recording) { clearInterval(timer); return }
 					uni.getLocation({
-						type: 'gcj02',
+						type: 'wgs84',
 						success: res => this.handleFix(res),
 						fail: (err) => this.handleLocationFail(err)
 					})
@@ -525,7 +652,7 @@
 				this.statusText = '正在实时定位…'
 				// 立即取一次，避免等 2 秒才出数
 				uni.getLocation({
-					type: 'gcj02',
+					type: 'wgs84',
 					success: res => this.handleFix(res),
 					fail: (err) => this.handleLocationFail(err)
 				})
@@ -545,38 +672,67 @@
 				}
 			},
 
-			handleFix(coords) {
-				const lng = Number(coords.longitude)
-				const lat = Number(coords.latitude)
-				if (!isFinite(lng) || !isFinite(lat)) return
+			/**
+			 * 处理一次定位。
+			 *
+			 * 坐标系约定：
+			 *   - 系统定位与 .travel 文件里存的一律是 WGS-84；
+			 *   - 高德地图显示、轨迹绘制必须用 GCJ-02。
+			 * 所以原始坐标先按 WGS-84 落盘，再单独转成 GCJ-02 供地图使用，
+			 * 落盘值绝不写转换后的坐标。
+			 */
+			async handleFix(coords) {
+				const wgsLng = Number(coords.longitude)
+				const wgsLat = Number(coords.latitude)
+				if (!isFinite(wgsLng) || !isFinite(wgsLat)) return
 				const t = Date.now()
 				const acc = coords.accuracy || 0
+
+				// 行程文件只存 WGS-84
+				if (this.travelId) {
+					const n = addGpsPoint(this.travelId, wgsLng, wgsLat)
+					if (n) this.savedPoints = n
+				}
+
+				// 转成 GCJ-02 后再交给地图与轨迹
+				let lng = wgsLng
+				let lat = wgsLat
+				try {
+					const gcj = await wgs84ToGcj02([{ lng: wgsLng, lat: wgsLat }])
+					if (gcj && gcj[0] && isFinite(gcj[0].lng) && isFinite(gcj[0].lat)) {
+						lng = gcj[0].lng
+						lat = gcj[0].lat
+					}
+				} catch (e) { /* 转换失败就用原始坐标，不中断测速 */ }
+
 				this.longitude = lng
 				this.latitude = lat
 				this.accuracy = acc
 				this.hasFix = true
-				this._now = t
+				this.nowTs = t
 
-				// 累计路程
+				// 累计路程 + 瞬时速度
 				if (this.lastFix) {
 					const d = this.distance(this.lastFix.lat, this.lastFix.lng, lat, lng)
 					const dt = (t - this.lastFix.t) / 1000
+					// 0.6m 以下当作定位抖动，不计入路程
 					if (dt > 0 && d > 0.6) {
 						this.totalDistance += d
+						// 瞬时速度：位移 / 时间间隔（m/s → km/h）
+						this.segSpeed = (d / dt) * 3.6
+					} else if (dt > 0) {
+						// 基本没动：速度归零，避免停留在上一次的读数
+						this.segSpeed = 0
 					}
 				}
 				this.lastFix = { lng, lat, t }
 				this.points.push({ lng, lat, t })
-				// 属于某条行程时同步落盘，退出后不会丢
-				if (this.travelId) {
-					const n = addGpsPoint(this.travelId, lng, lat)
-					if (n) this.savedPoints = n
-				}
 
-				// 每次当前速度变化时，若当前速度大于最高速度则更新最高速度
-				// 前 3 秒不计算最高速度（避免定位初始噪声）
-				if (t - this._startTs >= 3000) {
-					const curSpeed = this.currentSpeed
+				// 若当前瞬时速度大于最高速度则更新最高速度。
+				// 前 3 秒不记录（避免定位初始噪声）；
+				// 直接用刚算出的 segSpeed，不读 computed，免得拿到上一帧的旧值。
+				if (t - this.startTs >= 3000) {
+					const curSpeed = this.segSpeed > 0 ? this.segSpeed : 0
 					if (curSpeed > this.maxSpeed) this.maxSpeed = curSpeed
 				}
 
@@ -623,7 +779,7 @@
 
 			stopTrack() {
 				this.recording = false
-				this._now = Date.now()
+				this.nowTs = Date.now()
 				this.clearWatch()
 				this.stopDrawLoop()
 				this.statusText = '已停止，共记录 ' + this.points.length + ' 个轨迹点'
@@ -675,7 +831,7 @@
 				if (!this.recording) return
 				this._frame = (this._frame || 0) + 1
 				// 刷新当前时间戳，驱动「总路程÷总时长」的速度与测试时长实时更新
-				this._now = Date.now()
+				this.nowTs = Date.now()
 				// 脉冲动画只需重画小圆点那一小块，不必重绘整条轨迹：
 				// 轨迹点可能上百个，每 180ms 全量重绘会明显拖慢。
 				if (this._proj && this._lastDot) {
