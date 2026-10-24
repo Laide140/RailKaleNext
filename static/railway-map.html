@@ -60,6 +60,8 @@ var GEO_DIR = getParam('geo') || './railway/'
 if (GEO_DIR.charAt(GEO_DIR.length - 1) !== '/') GEO_DIR += '/'
 // API 根地址（从 GEO_DIR 推导：去掉 /getTrainTimeTable/railway 后缀）
 var API_BASE = GEO_DIR.replace(/\/getTrainTimeTable\/railway\/?$/, '')
+// 车次相关接口在 /api/v3 下，路径与老的 /api/getXxx 不同
+var API_V3 = API_BASE.replace(/\/api$/, '/api/v3')
 var FILE_LIST = ['110000.geojson','120000.geojson','130000.geojson','140000.geojson','150000.geojson','210000.geojson','220000.geojson','230000.geojson','310000.geojson','320000.geojson','330000.geojson','340000.geojson','350000.geojson','360000.geojson','370000.geojson','410000.geojson','420000.geojson','430000.geojson','440000.geojson','450000.geojson','460000.geojson','500000.geojson','510000.geojson','520000.geojson','530000.geojson','540000.geojson','610000.geojson','620000.geojson','630000.geojson','640000.geojson','650000.geojson','810000.geojson','820000.geojson']
 var map = null, canvasCtx = null, canvasEl = null
 var allFeatures = []
@@ -327,7 +329,7 @@ async function h5Scan() {
 	if (!stations.length) return
 	var params = stations.map(function(s){return 'station=' + encodeURIComponent(s)}).join('&')
 	try {
-		var r = await fetch(API_BASE + '/getLineTrains/?' + params)
+		var r = await fetch(API_V3 + '/lineTrains?' + params)
 		var d = await r.json()
 		if (d.code === '0' && d.trains && d.trains.length) {
 			clearTrainMarkers()
@@ -335,13 +337,13 @@ async function h5Scan() {
 				var batch = d.trains.slice(i, i + 20)
 				var results = await Promise.all(batch.map(async function(num) {
 					try {
-						var r2 = await fetch(API_BASE + '/getTrainLocate/index.php?train=' + encodeURIComponent(num))
+						var r2 = await fetch(API_V3 + '/trainLocate?train=' + encodeURIComponent(num))
 						var d2 = await r2.json()
 						if (d2.code === 0 && d2.data && d2.data.position) {
 							// 查询担当车组号后再展示标记，避免详情一直显示占位符。
 							// 车组数据来自自有数据源 getTrainData。
 							try {
-								var er = await fetch(API_BASE + '/getTrainData/?train=' + encodeURIComponent(num))
+								var er = await fetch(API_V3 + '/emu?train=' + encodeURIComponent(num))
 								var ed = await er.json()
 								if (ed && ed.code === 200 && ed.data && ed.data.trainSet) {
 									d2.data.emu_no = ed.data.trainSet

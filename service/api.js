@@ -3,7 +3,7 @@
  * 统一封装所有铁路信息查询接口
  *
  * 支持三套数据源（可在设置中切换，默认“新”）：
- *   next   ：新（推荐）  https://next.laide.net.cn/api
+ *   next   ：新（推荐）  https://next.laide.net.cn/api/v3
  *   old    ：旧          https://rail.laide.asia/api
  *   railgo ：RailGo 友商 https://rg-api.zenglingkun.cn/api/v2
  *
@@ -15,8 +15,27 @@ import { getKey } from '@/common/keys.js'
 import { getApiSource } from '@/common/settings.js'
 import { getTelecode } from '@/common/station.js'
 
-const NEXT_BASE = 'https://next.laide.net.cn/api'
+// 「新」数据源 V3：/api/v3，路径为短名、不带 .php 与尾斜杠
+const NEXT_BASE = 'https://next.laide.net.cn/api/v3'
+// 「新」数据源 V2：/api，基于 Node，车次 / 余票等端点在此
+const NEXT_V2_BASE = 'https://next.laide.net.cn/api'
 const OLD_BASE = 'https://rail.laide.asia/api'
+// /api/v3 下的端点名。旧名 /api/getXxx 在 v3 下都是 404，
+// 车次 / 余票 / 路网索引等未进 v3 的端点仍留在 /api。
+const V3_PATH = {
+	getStationCode: 'stationCode',
+	getStationBigScreen: 'stationBigScreen',
+	getExit: 'stationExit',
+	getStationArea: 'stationArea',
+	getLineTrains: 'lineTrains',
+	getStationInfo: 'stationInfo',
+	getStationSaleTimeInfo: 'stationSaleTimeInfo',
+	getTrainTimeTable: 'trainTimeTable',
+	getTrainLocate: 'trainLocate',
+	getTrainData: 'emu',
+	bureauMap: 'bureauMap',
+	mapLine: 'mapLine'
+}
 const RAILGO_BASE = 'https://rg-api.zenglingkun.cn/api/v2'
 
 // RailGo 支持的端点集合（其余端点自动回退到新源）
@@ -53,7 +72,20 @@ export function resolveBase(endpoint) {
 	if (src === 'old') {
 		return { base: OLD_BASE, source: 'old' }
 	}
-	return { base: NEXT_BASE, source: 'next' }
+	// 已进 v3 的端点走 /api/v3；其余（车次 / 余票等）仍走 /api
+	if (V3_PATH[endpoint]) {
+		return { base: NEXT_BASE, source: 'next' }
+	}
+	return { base: NEXT_V2_BASE, source: 'next-v2' }
+}
+
+/**
+ * 取某端点的完整 URL（供页面自己拼查询串的场景，如路网地图、雷达）
+ * @param {string} endpoint 端点名，如 'getLineTrains'
+ * @returns {string}
+ */
+export function endpointHref(endpoint) {
+	return endpointUrl(endpoint, resolveBase(endpoint))
 }
 
 /**
@@ -63,7 +95,11 @@ export function resolveBase(endpoint) {
  * @returns {string} 完整 url
  */
 function endpointUrl(endpoint, r) {
-	// 新/旧的 v2 风格端点需要尾斜杠（避免 301）；RailGo 不能带尾斜杠
+	// v3：短名、不带 .php 与尾斜杠
+	if (r.source === 'next') {
+		return r.base + '/' + V3_PATH[endpoint]
+	}
+	// 旧源：v2 风格的部分端点需要尾斜杠（避免 301）；RailGo 不能带尾斜杠
 	const slashed = ['getStationBigScreen', 'getExit', 'mapLine', 'getStationArea', 'getLineTrains', 'getStationInfo', 'getStationSaleTimeInfo']
 	if (r.source === 'railgo') {
 		return r.base + '/' + endpoint
@@ -109,11 +145,11 @@ function requestEndpoint(endpoint, data = {}, opts = {}) {
 
 /**
  * 1. 获取车站代码映射
- * GET /getStationCode/index.php
+ * GET /api/v3/stationCode
  * @returns {Promise<Array<string>>} 车站代码列表
  */
 export function getStationCode() {
-	return requestEndpoint('getStationCode/index.php')
+	return requestEndpoint('getStationCode')
 }
 
 /**
@@ -128,10 +164,10 @@ export function getTrains(from, to, date) {
 
 /**
  * 3. 获取车次时刻表
- * GET /getTrainTimeTable/index.php
+ * GET /api/v3/trainTimeTable
  */
 export function getTrainTimeTable(train, date) {
-	return requestEndpoint('getTrainTimeTable/index.php', { train, date })
+	return requestEndpoint('getTrainTimeTable', { train, date })
 }
 
 /**
@@ -146,7 +182,7 @@ export function getLeftTickets(from, to, date) {
 
 /**
  * 3.2 站台规模查询
- * GET /getStationArea/
+ * GET /api/v3/stationArea
  */
 export function getStationArea(station) {
 	return requestEndpoint('getStationArea', { station })
@@ -154,10 +190,10 @@ export function getStationArea(station) {
 
 /**
  * 4. 查询列车实时位置
- * GET /getTrainLocate/index.php
+ * GET /api/v3/trainLocate
  */
 export function getTrainLocate(train) {
-	return requestEndpoint('getTrainLocate/index.php', { train })
+	return requestEndpoint('getTrainLocate', { train })
 }
 
 /**
@@ -206,7 +242,7 @@ export function getMapLine(train) {
 
 /**
  * 8.1 按车站查询线路上运行的车次（列车雷达）
- * GET /getLineTrains/?station=站1&station=站2
+ * GET /api/v3/lineTrains?station=站1&station=站2
  * @param {string[]} stations - 车站名列表
  */
 export function getLineTrains(stations) {
@@ -216,7 +252,7 @@ export function getLineTrains(stations) {
 
 /**
  * 8.2 车站交通接驳信息（交通查询）
- * GET /getStationInfo/?stationCode=IZQ
+ * GET /api/v3/stationInfo?stationCode=IZQ
  * @param {string} stationCode - 车站电报码
  */
 export function getStationInfo(stationCode) {
@@ -391,7 +427,7 @@ export function getStationRoute(from, to, km, ver) {
 
 /**
  * 车站开售时间 —— 自有数据源
- * GET /getStationSaleTimeInfo/   （返回全部车站，约 3149 条 / 800KB，忽略入参）
+ * GET /api/v3/stationSaleTimeInfo   （返回全部车站，约 3149 条 / 800KB，忽略入参）
  *
  * 返回项：{ bureau_code, station_name, station_telecode, sale_time, ... }
  * sale_time 为 4 位字符串，如 "1630" 表示每日 16:30 起售。
@@ -459,7 +495,7 @@ export function formatSaleTime(t) {
 
 /**
  * 按日期查询车次担当车组 —— 自有数据源
- * GET /getTrainInfo/?train={车次}&date={YYYYMMDD}
+ * GET /api/v3/emu?train={车次}&date={YYYYMMDD}
  *
  * 与 getTrainData 的区别：本端点支持日期，同一车次在不同日期的担当
  * 车组可能不同（例：G1 在 20261016 为 CR400BF-A-5057，20261017 为
@@ -474,7 +510,7 @@ export function formatSaleTime(t) {
  */
 export function getTrainInfoByDate(train, date) {
 	const day = String(date || '').replace(/-/g, '')
-	let url = NEXT_BASE + '/getTrainInfo/?train=' + encodeURIComponent(train)
+	let url = NEXT_BASE + '/emu?train=' + encodeURIComponent(train)
 	if (/^\d{8}$/.test(day)) url += '&date=' + day
 	return new Promise((resolve) => {
 		uni.request({
@@ -512,8 +548,8 @@ export function todayStr() {
 
 /**
  * 车组运用数据（车次 ↔ 车组号 担当关系）— 自有数据源
- * GET /api/getTrainInfo/?train={车次}&date={YYYYMMDD}   按车次查
- * GET /api/getTrainInfo/?tn={车组号}&date={YYYYMMDD}    按车组查
+ * GET /api/v3/emu?train={车次}&date={YYYYMMDD}   按车次查
+ * GET /api/v3/emu?tn={车组号}&date={YYYYMMDD}    按车组查
  *
  * 注意参数名不同：按车次查用 train，按车组查必须用 tn。
  * 传错参数会报「未找到车次」/「缺少 train 参数」，不会自动识别。
@@ -530,7 +566,7 @@ export function todayStr() {
 export function getTrainData(mode, value, date) {
 	const key = mode === 'emu' ? 'tn' : 'train'
 	const day = String(date || '').replace(/-/g, '')
-	let url = NEXT_BASE + '/getTrainInfo/?' + key + '=' + encodeURIComponent(value)
+	let url = NEXT_BASE + '/emu?' + key + '=' + encodeURIComponent(value)
 	if (/^\d{8}$/.test(day)) url += '&date=' + day
 	return new Promise((resolve) => {
 		uni.request({
@@ -913,7 +949,7 @@ export function getTrainBroadcastUrl(text, opts = {}) {
 	const _t = Date.now()
 	const speed = opts.speed ? '&speed=' + opts.speed : ''
 	const pitch = opts.pitch ? '&pitch=' + opts.pitch : ''
-	return NEXT_BASE + '/getXiaoYanTTS/?context=' + encodeURIComponent(text) + speed + pitch + '&_t=' + _t
+	return NEXT_BASE + '/xiaoyanTTS?context=' + encodeURIComponent(text) + speed + pitch + '&_t=' + _t
 }
 
 /**

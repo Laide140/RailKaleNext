@@ -1,6 +1,6 @@
 /**
  * 车站代码工具 - 在电报码和中文名之间互相转换
- * 数据来自 /api/getStationCode/index.php
+ * 数据来自 /api/v3/stationCode
  */
 
 import { getStationCode, parseStationCode } from '@/service/api.js'

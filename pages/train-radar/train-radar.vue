@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import { getApiBase, getTrainSetOfTrain } from '@/service/api.js'
+import { getApiBase, endpointHref, getTrainSetOfTrain } from '@/service/api.js'
 import { getKey } from '@/common/keys.js'
 export default {
 	data() { return { mapUrl: '', _timer: null } },
@@ -120,7 +120,7 @@ export default {
 		async queryTrains(stations) {
 			// 构造 station=站1&station=站2&... 参数
 			var params = stations.map(function(s) { return 'station=' + encodeURIComponent(s) }).join('&')
-			var url = getApiBase('getLineTrains') + '/getLineTrains/?' + params
+			var url = endpointHref('getLineTrains') + '?' + params
 			console.log('[雷达] 请求: ' + url.substring(0, 120))
 			try {
 				var r = await this.req(url)
@@ -139,7 +139,7 @@ export default {
 			for (var i = 0; i < trains.length; i += 20) {
 				var batch = trains.slice(i, i + 20)
 				var results = await Promise.all(batch.map(function(num) {
-					return this.req(getApiBase('getTrainLocate/index.php') + '/getTrainLocate/index.php?train=' + encodeURIComponent(num)).then(function(d) {
+					return this.req(endpointHref('getTrainLocate') + '?train=' + encodeURIComponent(num)).then(function(d) {
 						if (d && d.code === 0 && d.data && d.data.position) return d.data
 						return null
 					}).catch(function(){return null})
