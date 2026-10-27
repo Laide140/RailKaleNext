@@ -34,7 +34,8 @@ const V3_PATH = {
 	getTrainLocate: 'trainLocate',
 	getTrainData: 'emu',
 	bureauMap: 'bureauMap',
-	mapLine: 'mapLine'
+	mapLine: 'mapLine',
+	getTrains: 'getTrains'
 }
 const RAILGO_BASE = 'https://rg-api.zenglingkun.cn/api/v2'
 
@@ -154,7 +155,7 @@ export function getStationCode() {
 
 /**
  * 2. 查询车次
- * GET /getTrains
+ * GET /api/v3/getTrains
  */
 export function getTrains(from, to, date) {
 	const data = { from, to }
